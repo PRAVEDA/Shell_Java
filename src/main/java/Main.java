@@ -43,8 +43,10 @@ public class Main {
                     if(!found){
                         System.out.println(command + ": not found") ; 
                     }
-                }
-    }
+                }       
+    } else {
+    System.out.println(input + ": command not found");
+}
   }
 } 
 }
