@@ -43,5 +43,6 @@ public class Main {
                     if(!found){
                         System.out.println(command + ": not found") ; 
                     }
+                }
     }
 }
