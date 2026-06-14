@@ -1,5 +1,6 @@
 import java.util.Scanner;
 import java.io.File;
+import java.nio.file.Path;
 
 public class Main {
 
@@ -33,17 +34,23 @@ public class Main {
             }
 
             else if (input.equals("pwd")) {
-                System.out.println(currentDirectory.getAbsolutePath());
+                System.out.println(currentDirectory.getCanonicalPath());
             }
 
             else if (input.startsWith("cd ")) {
 
                 String path = input.substring(3);
 
-                File newDir = new File(path);
+                File newDir;
+
+                if (path.startsWith("/")) {
+                    newDir = new File(path);
+                } else {
+                    newDir = new File(currentDirectory, path);
+                }
 
                 if (newDir.exists() && newDir.isDirectory()) {
-                    currentDirectory = newDir;
+                    currentDirectory = newDir.getCanonicalFile();
                 } else {
                     System.out.println("cd: " + path + ": No such file or directory");
                 }
