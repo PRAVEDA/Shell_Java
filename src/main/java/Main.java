@@ -1,6 +1,5 @@
 import java.util.Scanner;
 import java.io.File;
-import java.nio.file.Path;
 
 public class Main {
 
@@ -43,9 +42,13 @@ public class Main {
 
                 File newDir;
 
-                if (path.startsWith("/")) {
+                if (path.equals("~")) {
+                    newDir = new File(System.getenv("HOME"));
+                }
+                else if (path.startsWith("/")) {
                     newDir = new File(path);
-                } else {
+                }
+                else {
                     newDir = new File(currentDirectory, path);
                 }
 
