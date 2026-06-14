@@ -6,7 +6,7 @@ public class Main {
     private static File findExecutable(String command) {
         String pathEnv = System.getenv("PATH");
         String[] paths = pathEnv.split(File.pathSeparator);
-
+        
         for (String dir : paths) {
             File file = new File(dir, command);
 
@@ -31,6 +31,10 @@ public class Main {
                 break;
             }
 
+            else if (input.equals("pwd")) {
+                System.out.println(System.getProperty("user.dir"));
+            }
+
             else if (input.startsWith("echo ")) {
                 System.out.println(input.substring(5));
             }
@@ -41,7 +45,8 @@ public class Main {
 
                 if (command.equals("echo")
                         || command.equals("exit")
-                        || command.equals("type")) {
+                        || command.equals("type")
+                        || command.equals("pwd")) {
 
                     System.out.println(command + " is a shell builtin");
                 }
