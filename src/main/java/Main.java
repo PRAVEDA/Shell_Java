@@ -6,7 +6,7 @@ public class Main {
     private static File findExecutable(String command) {
         String pathEnv = System.getenv("PATH");
         String[] paths = pathEnv.split(File.pathSeparator);
-        
+
         for (String dir : paths) {
             File file = new File(dir, command);
 
@@ -21,6 +21,7 @@ public class Main {
     public static void main(String[] args) throws Exception {
 
         Scanner scanner = new Scanner(System.in);
+        File currentDirectory = new File(System.getProperty("user.dir"));
 
         while (true) {
             System.out.print("$ ");
@@ -32,7 +33,20 @@ public class Main {
             }
 
             else if (input.equals("pwd")) {
-                System.out.println(System.getProperty("user.dir"));
+                System.out.println(currentDirectory.getAbsolutePath());
+            }
+
+            else if (input.startsWith("cd ")) {
+
+                String path = input.substring(3);
+
+                File newDir = new File(path);
+
+                if (newDir.exists() && newDir.isDirectory()) {
+                    currentDirectory = newDir;
+                } else {
+                    System.out.println("cd: " + path + ": No such file or directory");
+                }
             }
 
             else if (input.startsWith("echo ")) {
@@ -46,7 +60,8 @@ public class Main {
                 if (command.equals("echo")
                         || command.equals("exit")
                         || command.equals("type")
-                        || command.equals("pwd")) {
+                        || command.equals("pwd")
+                        || command.equals("cd")) {
 
                     System.out.println(command + " is a shell builtin");
                 }
@@ -72,6 +87,7 @@ public class Main {
                 if (executable != null) {
 
                     ProcessBuilder pb = new ProcessBuilder(parts);
+                    pb.directory(currentDirectory);
                     pb.inheritIO();
 
                     Process process = pb.start();
