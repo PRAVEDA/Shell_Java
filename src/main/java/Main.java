@@ -22,20 +22,30 @@ public class Main {
 
     private static List<String> parseCommand(String input) {
         List<String> args = new ArrayList<>();
+
         StringBuilder current = new StringBuilder();
         boolean inSingleQuotes = false;
+        boolean inDoubleQuotes = false;
 
         for (int i = 0; i < input.length(); i++) {
             char ch = input.charAt(i);
 
-            if (ch == '\'') {
+            if (ch == '\'' && !inDoubleQuotes) {
                 inSingleQuotes = !inSingleQuotes;
-            } else if (Character.isWhitespace(ch) && !inSingleQuotes) {
+            }
+            else if (ch == '"' && !inSingleQuotes) {
+                inDoubleQuotes = !inDoubleQuotes;
+            }
+            else if (Character.isWhitespace(ch)
+                    && !inSingleQuotes
+                    && !inDoubleQuotes) {
+
                 if (current.length() > 0) {
                     args.add(current.toString());
                     current.setLength(0);
                 }
-            } else {
+            }
+            else {
                 current.append(ch);
             }
         }
@@ -53,6 +63,7 @@ public class Main {
         File currentDirectory = new File(System.getProperty("user.dir"));
 
         while (true) {
+
             System.out.print("$ ");
 
             String input = scanner.nextLine();
@@ -85,9 +96,11 @@ public class Main {
 
                 if (path.equals("~")) {
                     newDir = new File(System.getenv("HOME"));
-                } else if (path.startsWith("/")) {
+                }
+                else if (path.startsWith("/")) {
                     newDir = new File(path);
-                } else {
+                }
+                else {
                     newDir = new File(currentDirectory, path);
                 }
 
@@ -127,7 +140,8 @@ public class Main {
                         || command.equals("cd")) {
 
                     System.out.println(command + " is a shell builtin");
-                } else {
+                }
+                else {
 
                     File executable = findExecutable(command);
 
