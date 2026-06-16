@@ -1,5 +1,7 @@
 import java.util.Scanner;
 import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
 
 public class Main {
 
@@ -18,6 +20,33 @@ public class Main {
         return null;
     }
 
+    private static List<String> parseCommand(String input) {
+        List<String> args = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        boolean inSingleQuotes = false;
+
+        for (int i = 0; i < input.length(); i++) {
+            char ch = input.charAt(i);
+
+            if (ch == '\'') {
+                inSingleQuotes = !inSingleQuotes;
+            } else if (Character.isWhitespace(ch) && !inSingleQuotes) {
+                if (current.length() > 0) {
+                    args.add(current.toString());
+                    current.setLength(0);
+                }
+            } else {
+                current.append(ch);
+            }
+        }
+
+        if (current.length() > 0) {
+            args.add(current.toString());
+        }
+
+        return args;
+    }
+
     public static void main(String[] args) throws Exception {
 
         Scanner scanner = new Scanner(System.in);
@@ -28,27 +57,37 @@ public class Main {
 
             String input = scanner.nextLine();
 
-            if (input.equals("exit")) {
+            List<String> tokens = parseCommand(input);
+
+            if (tokens.isEmpty()) {
+                continue;
+            }
+
+            String commandName = tokens.get(0);
+
+            if (commandName.equals("exit")) {
                 break;
             }
 
-            else if (input.equals("pwd")) {
+            else if (commandName.equals("pwd")) {
                 System.out.println(currentDirectory.getCanonicalPath());
             }
 
-            else if (input.startsWith("cd ")) {
+            else if (commandName.equals("cd")) {
 
-                String path = input.substring(3);
+                if (tokens.size() < 2) {
+                    continue;
+                }
+
+                String path = tokens.get(1);
 
                 File newDir;
 
                 if (path.equals("~")) {
                     newDir = new File(System.getenv("HOME"));
-                }
-                else if (path.startsWith("/")) {
+                } else if (path.startsWith("/")) {
                     newDir = new File(path);
-                }
-                else {
+                } else {
                     newDir = new File(currentDirectory, path);
                 }
 
@@ -59,13 +98,27 @@ public class Main {
                 }
             }
 
-            else if (input.startsWith("echo ")) {
-                System.out.println(input.substring(5));
+            else if (commandName.equals("echo")) {
+
+                StringBuilder output = new StringBuilder();
+
+                for (int i = 1; i < tokens.size(); i++) {
+                    if (i > 1) {
+                        output.append(" ");
+                    }
+                    output.append(tokens.get(i));
+                }
+
+                System.out.println(output);
             }
 
-            else if (input.startsWith("type ")) {
+            else if (commandName.equals("type")) {
 
-                String command = input.substring(5);
+                if (tokens.size() < 2) {
+                    continue;
+                }
+
+                String command = tokens.get(1);
 
                 if (command.equals("echo")
                         || command.equals("exit")
@@ -74,9 +127,7 @@ public class Main {
                         || command.equals("cd")) {
 
                     System.out.println(command + " is a shell builtin");
-                }
-
-                else {
+                } else {
 
                     File executable = findExecutable(command);
 
@@ -90,13 +141,11 @@ public class Main {
 
             else {
 
-                String[] parts = input.split(" ");
-
-                File executable = findExecutable(parts[0]);
+                File executable = findExecutable(commandName);
 
                 if (executable != null) {
 
-                    ProcessBuilder pb = new ProcessBuilder(parts);
+                    ProcessBuilder pb = new ProcessBuilder(tokens);
                     pb.directory(currentDirectory);
                     pb.inheritIO();
 
@@ -104,7 +153,7 @@ public class Main {
                     process.waitFor();
 
                 } else {
-                    System.out.println(input + ": command not found");
+                    System.out.println(commandName + ": command not found");
                 }
             }
         }
