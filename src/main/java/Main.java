@@ -20,49 +20,69 @@ public class Main {
         return null;
     }
 
-    private static List<String> parseCommand(String input) {
-        List<String> args = new ArrayList<>();
+  private static List<String> parseCommand(String input) {
+    List<String> args = new ArrayList<>();
 
-        StringBuilder current = new StringBuilder();
-        boolean inSingleQuotes = false;
-        boolean inDoubleQuotes = false;
+    StringBuilder current = new StringBuilder();
+    boolean inSingleQuotes = false;
+    boolean inDoubleQuotes = false;
 
-        for (int i = 0; i < input.length(); i++) {
-            char ch = input.charAt(i);
+    for (int i = 0; i < input.length(); i++) {
+        char ch = input.charAt(i);
 
-            if (ch == '\\' && !inSingleQuotes && !inDoubleQuotes) {
-                if (i + 1 < input.length()) {
-                    current.append(input.charAt(i + 1));
+        if (inDoubleQuotes && ch == '\\') {
+
+            if (i + 1 < input.length()) {
+                char next = input.charAt(i + 1);
+
+                if (next == '"' || next == '\\') {
+                    current.append(next);
                     i++;
+                } else {
+                    current.append('\\');
                 }
-            }
-            else if (ch == '\'' && !inDoubleQuotes) {
-                inSingleQuotes = !inSingleQuotes;
-            }
-            else if (ch == '"' && !inSingleQuotes) {
-                inDoubleQuotes = !inDoubleQuotes;
-            }
-            else if (Character.isWhitespace(ch)
-                    && !inSingleQuotes
-                    && !inDoubleQuotes) {
-
-                if (current.length() > 0) {
-                    args.add(current.toString());
-                    current.setLength(0);
-                }
-            }
-            else {
-                current.append(ch);
+            } else {
+                current.append('\\');
             }
         }
 
-        if (current.length() > 0) {
-            args.add(current.toString());
+        else if (ch == '\\' && !inSingleQuotes && !inDoubleQuotes) {
+
+            if (i + 1 < input.length()) {
+                current.append(input.charAt(i + 1));
+                i++;
+            }
         }
 
-        return args;
+        else if (ch == '\'' && !inDoubleQuotes) {
+            inSingleQuotes = !inSingleQuotes;
+        }
+
+        else if (ch == '"' && !inSingleQuotes) {
+            inDoubleQuotes = !inDoubleQuotes;
+        }
+
+        else if (Character.isWhitespace(ch)
+                && !inSingleQuotes
+                && !inDoubleQuotes) {
+
+            if (current.length() > 0) {
+                args.add(current.toString());
+                current.setLength(0);
+            }
+        }
+
+        else {
+            current.append(ch);
+        }
     }
 
+    if (current.length() > 0) {
+        args.add(current.toString());
+    }
+
+    return args;
+}
     public static void main(String[] args) throws Exception {
 
         Scanner scanner = new Scanner(System.in);
