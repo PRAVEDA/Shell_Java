@@ -8,12 +8,25 @@
     <artifactId>codecrafters-shell</artifactId>
     <version>1.0</version>
 
-   <properties>
+    <properties>
         <maven.compiler.source>26</maven.compiler.source>
         <maven.compiler.target>26</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <java.version>26</java.version>
     </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.jline</groupId>
+            <artifactId>jline-reader</artifactId>
+            <version>3.26.0</version>
+        </dependency>
+        <dependency>
+            <groupId>org.jline</groupId>
+            <artifactId>jline-terminal</artifactId>
+            <version>3.26.0</version>
+        </dependency>
+    </dependencies>
 
     <build>
         <plugins>
@@ -30,15 +43,13 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-assembly-plugin</artifactId>
                 <configuration>
-                    <finalName>codecrafters-shell</finalName> <!-- Please do not change this final artifact name-->
-                    <descriptorRefs>
+                    <finalName>codecrafters-shell</finalName> <descriptorRefs>
                         <descriptorRef>jar-with-dependencies</descriptorRef>
                     </descriptorRefs>
                     <appendAssemblyId>false</appendAssemblyId>
                     <archive>
                         <manifest>
                             <addClasspath>true</addClasspath>
-                            <!-- This is the main class of your program which will be executed-->
                             <mainClass>Main</mainClass>
                         </manifest>
                     </archive>
