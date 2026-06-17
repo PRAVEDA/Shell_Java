@@ -1,10 +1,3 @@
-Here is the complete, updated `Main.java` file that adds full support for **appending standard error (`2>>`)**.
-
-The changes include adding a `isErrorAppend` boolean flag during the parsing step, utilizing `new FileOutputStream(errorRedirectFile, true)` for built-in error outputs, and leveraging `ProcessBuilder.Redirect.appendTo()` for external command errors.
-
-Replace your entire file with this code:
-
-```java
 import java.util.Scanner;
 import java.io.File;
 import java.io.PrintStream;
@@ -285,5 +278,3 @@ public class Main {
         scanner.close();
     }
 }
-
-```
