@@ -4,12 +4,15 @@ import java.io.PrintStream;
 import java.io.FileOutputStream;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.TreeSet;
 
 // JLine Imports
+import org.jline.reader.Candidate;
+import org.jline.reader.Completer;
 import org.jline.reader.LineReader;
 import org.jline.reader.LineReaderBuilder;
+import org.jline.reader.ParsedLine;
 import org.jline.reader.impl.DefaultParser;
-import org.jline.reader.impl.completer.StringsCompleter;
 import org.jline.terminal.Terminal;
 import org.jline.terminal.TerminalBuilder;
 
@@ -100,16 +103,59 @@ public class Main {
         DefaultParser parser = new DefaultParser();
         parser.setEscapeChars(new char[0]); 
 
-        // Matchable target built-ins
-        StringsCompleter completer = new StringsCompleter("echo", "exit");
+        // Custom completer that handles builtins and paths dynamically
+        Completer pathCompleter = new Completer() {
+            @Override
+            public void complete(LineReader reader, ParsedLine line, List<Candidate> candidates) {
+                // Autocomplete only makes sense for the first token (the command)
+                if (line.wordIndex() != 0) {
+                    return;
+                }
+
+                String word = line.word();
+                TreeSet<String> matches = new TreeSet<>();
+
+                // 1. Match Builtins
+                String[] builtins = {"echo", "exit", "pwd", "cd", "type"};
+                for (String builtin : builtins) {
+                    if (builtin.startsWith(word)) {
+                        matches.add(builtin);
+                    }
+                }
+
+                // 2. Match Executables from PATH environment variable
+                String pathEnv = System.getenv("PATH");
+                if (pathEnv != null) {
+                    String[] paths = pathEnv.split(File.pathSeparator);
+                    for (String path : paths) {
+                        File dir = new File(path);
+                        if (dir.exists() && dir.isDirectory()) {
+                            File[] files = dir.listFiles();
+                            if (files != null) {
+                                for (File file : files) {
+                                    if (file.isFile() && file.canExecute() && file.getName().startsWith(word)) {
+                                        matches.add(file.getName());
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Populate candidates list with matches found
+                for (String match : matches) {
+                    candidates.add(new Candidate(match));
+                }
+            }
+        };
 
         LineReader reader = LineReaderBuilder.builder()
                 .terminal(terminal)
-                .completer(completer)
+                .completer(pathCompleter)
                 .parser(parser)
                 .build();
 
-        // Enforce clean layout setups: complete word, append a space, and don't dump menu items
+        // Enforce clean layout setups: complete word, append a space
         reader.setOpt(LineReader.Option.AUTO_MENU);
         reader.setOpt(LineReader.Option.AUTO_LIST);
         reader.setVariable(LineReader.DISABLE_COMPLETION, false);
@@ -126,7 +172,6 @@ public class Main {
                 break;
             }
 
-            // Clean trailing/leading spaces before starting token checks
             input = input.trim();
             if (input.isEmpty()) {
                 continue;
