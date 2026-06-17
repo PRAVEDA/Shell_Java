@@ -100,13 +100,26 @@ public class Main {
             List<String> tokens = parseCommand(input);
 
             String redirectFile = null;
+            String errorRedirectFile = null;
 
             for (int i = 0; i < tokens.size(); i++) {
 
-                if (tokens.get(i).equals(">") || tokens.get(i).equals("1>")) {
+                String token = tokens.get(i);
+
+                if (token.equals(">") || token.equals("1>")) {
 
                     if (i + 1 < tokens.size()) {
                         redirectFile = tokens.get(i + 1);
+                        tokens = new ArrayList<>(tokens.subList(0, i));
+                    }
+
+                    break;
+                }
+
+                if (token.equals("2>")) {
+
+                    if (i + 1 < tokens.size()) {
+                        errorRedirectFile = tokens.get(i + 1);
                         tokens = new ArrayList<>(tokens.subList(0, i));
                     }
 
@@ -160,7 +173,16 @@ public class Main {
                 if (newDir.exists() && newDir.isDirectory()) {
                     currentDirectory = newDir.getCanonicalFile();
                 } else {
-                    System.out.println("cd: " + path + ": No such file or directory");
+
+                    String error = "cd: " + path + ": No such file or directory";
+
+                    if (errorRedirectFile != null) {
+                        PrintStream ps = new PrintStream(new FileOutputStream(errorRedirectFile));
+                        ps.println(error);
+                        ps.close();
+                    } else {
+                        System.out.println(error);
+                    }
                 }
             }
 
@@ -239,16 +261,39 @@ public class Main {
 
                     if (redirectFile != null) {
                         pb.redirectOutput(new File(redirectFile));
-                        pb.redirectError(ProcessBuilder.Redirect.INHERIT);
-                    } else {
+                    }
+
+                    if (errorRedirectFile != null) {
+                        pb.redirectError(new File(errorRedirectFile));
+                    }
+
+                    if (redirectFile == null && errorRedirectFile == null) {
                         pb.inheritIO();
+                    } else {
+
+                        if (redirectFile == null) {
+                            pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+                        }
+
+                        if (errorRedirectFile == null) {
+                            pb.redirectError(ProcessBuilder.Redirect.INHERIT);
+                        }
                     }
 
                     Process process = pb.start();
                     process.waitFor();
 
                 } else {
-                    System.out.println(commandName + ": command not found");
+
+                    String error = commandName + ": command not found";
+
+                    if (errorRedirectFile != null) {
+                        PrintStream ps = new PrintStream(new FileOutputStream(errorRedirectFile));
+                        ps.println(error);
+                        ps.close();
+                    } else {
+                        System.out.println(error);
+                    }
                 }
             }
         }
