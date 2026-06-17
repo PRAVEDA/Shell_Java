@@ -112,6 +112,20 @@ public class Main {
         return matches;
     }
 
+    // Helper to find the Longest Common Prefix among a set of matched commands
+    private static String findLCP(TreeSet<String> matches) {
+        if (matches == null || matches.isEmpty()) return "";
+        String first = matches.first();
+        String last = matches.last();
+        int minLength = Math.min(first.length(), last.length());
+        
+        int i = 0;
+        while (i < minLength && first.charAt(i) == last.charAt(i)) {
+            i++;
+        }
+        return first.substring(0, i);
+    }
+
     public static void main(String[] args) throws Exception {
         File currentDirectory = new File(System.getProperty("user.dir"));
 
@@ -321,26 +335,37 @@ public class Main {
                         tabCount = 0;
                     } 
                     else if (matches.size() > 1) {
-                        if (tabCount == 1) {
-                            System.out.print("\u0007");
+                        String lcp = findLCP(matches);
+                        
+                        // If there is a shared prefix longer than what's typed, complete up to it!
+                        if (lcp.length() > currentInput.length()) {
+                            String toAppend = lcp.substring(currentInput.length());
+                            inputBuffer.append(toAppend);
+                            System.out.print(toAppend);
                             System.out.flush();
-                        } else if (tabCount >= 2) {
-                            System.out.print("\r\n");
-                            StringBuilder lineBuilder = new StringBuilder();
-                            for (String match : matches) {
-                                if (lineBuilder.length() > 0) {
-                                    lineBuilder.append("  ");
+                            tabCount = 0; // Reset tab state on active partial autocompletion
+                        } else {
+                            // No deeper common prefix exists; proceed with multi-tab behavior
+                            if (tabCount == 1) {
+                                System.out.print("\u0007");
+                                System.out.flush();
+                            } else if (tabCount >= 2) {
+                                System.out.print("\r\n");
+                                StringBuilder lineBuilder = new StringBuilder();
+                                for (String match : matches) {
+                                    if (lineBuilder.length() > 0) {
+                                        lineBuilder.append("  ");
+                                    }
+                                    lineBuilder.append(match);
                                 }
-                                lineBuilder.append(match);
+                                System.out.println(lineBuilder.toString());
+                                
+                                System.out.print("$ " + currentInput);
+                                System.out.flush();
+                                tabCount = 0;
                             }
-                            System.out.println(lineBuilder.toString());
-                            
-                            System.out.print("$ " + currentInput);
-                            System.out.flush();
-                            tabCount = 0;
                         }
                     } else {
-                        // Matches == 0: Ring the bell when nothing matches!
                         System.out.print("\u0007");
                         System.out.flush();
                         tabCount = 0;
