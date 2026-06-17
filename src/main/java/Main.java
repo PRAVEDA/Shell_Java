@@ -322,7 +322,6 @@ public class Main {
                     } 
                     else if (matches.size() > 1) {
                         if (tabCount == 1) {
-                            // Ring the bell strictly without any other system updates or line flushes
                             System.out.print("\u0007");
                             System.out.flush();
                         } else if (tabCount >= 2) {
@@ -330,7 +329,7 @@ public class Main {
                             StringBuilder lineBuilder = new StringBuilder();
                             for (String match : matches) {
                                 if (lineBuilder.length() > 0) {
-                                    lineBuilder.append("  "); // Explicitly separated by two spaces
+                                    lineBuilder.append("  ");
                                 }
                                 lineBuilder.append(match);
                             }
@@ -341,6 +340,9 @@ public class Main {
                             tabCount = 0;
                         }
                     } else {
+                        // Matches == 0: Ring the bell when nothing matches!
+                        System.out.print("\u0007");
+                        System.out.flush();
                         tabCount = 0;
                     }
                 } else {
