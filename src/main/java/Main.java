@@ -9,6 +9,7 @@ public class Main {
 
     private static File findExecutable(String command) {
         String pathEnv = System.getenv("PATH");
+        if (pathEnv == null) return null;
         String[] paths = pathEnv.split(File.pathSeparator);
 
         for (String dir : paths) {
@@ -86,19 +87,30 @@ public class Main {
         while (true) {
 
             System.out.print("$ ");
+            if (!scanner.hasNextLine()) {
+                break;
+            }
             String input = scanner.nextLine();
 
             List<String> tokens = new ArrayList<>(parseCommand(input));
 
             String redirectFile = null;
             String errorRedirectFile = null;
+            boolean isAppend = false;
 
-            // Scan ALL tokens — don't break early so both > and 2> can be found
+            // Scan ALL tokens — handles >, 1>, >>, 1>>, and 2>
             for (int i = 0; i < tokens.size(); i++) {
                 String token = tokens.get(i);
 
                 if ((token.equals(">") || token.equals("1>")) && i + 1 < tokens.size()) {
                     redirectFile = tokens.get(i + 1);
+                    isAppend = false;
+                    tokens.remove(i + 1);
+                    tokens.remove(i);
+                    i--;
+                } else if ((token.equals(">>") || token.equals("1>>")) && i + 1 < tokens.size()) {
+                    redirectFile = tokens.get(i + 1);
+                    isAppend = true;
                     tokens.remove(i + 1);
                     tokens.remove(i);
                     i--;
@@ -131,13 +143,12 @@ public class Main {
             else if (commandName.equals("pwd")) {
                 String output = currentDirectory.getCanonicalPath();
                 if (redirectFile != null) {
-                    PrintStream ps = new PrintStream(new FileOutputStream(redirectFile));
+                    PrintStream ps = new PrintStream(new FileOutputStream(redirectFile, isAppend));
                     ps.println(output);
                     ps.close();
                 } else {
                     System.out.println(output);
                 }
-                // pwd never writes to stderr — errorRedirectFile already created above
             }
 
             else if (commandName.equals("cd")) {
@@ -159,7 +170,7 @@ public class Main {
                 } else {
                     String err = "cd: " + path + ": No such file or directory";
                     if (errorRedirectFile != null) {
-                        PrintStream ps = new PrintStream(new FileOutputStream(errorRedirectFile));
+                        PrintStream ps = new PrintStream(new FileOutputStream(errorRedirectFile, false));
                         ps.println(err);
                         ps.close();
                     } else {
@@ -176,13 +187,12 @@ public class Main {
                 }
 
                 if (redirectFile != null) {
-                    PrintStream ps = new PrintStream(new FileOutputStream(redirectFile));
+                    PrintStream ps = new PrintStream(new FileOutputStream(redirectFile, isAppend));
                     ps.println(output);
                     ps.close();
                 } else {
                     System.out.println(output);
                 }
-                // echo never writes to stderr — errorRedirectFile already created/empty above
             }
 
             else if (commandName.equals("type")) {
@@ -205,7 +215,7 @@ public class Main {
                 }
 
                 if (redirectFile != null) {
-                    PrintStream ps = new PrintStream(new FileOutputStream(redirectFile));
+                    PrintStream ps = new PrintStream(new FileOutputStream(redirectFile, isAppend));
                     ps.println(output);
                     ps.close();
                 } else {
@@ -221,13 +231,17 @@ public class Main {
                     pb.directory(currentDirectory);
 
                     if (redirectFile != null) {
-                        pb.redirectOutput(new File(redirectFile));
+                        if (isAppend) {
+                            pb.redirectOutput(ProcessBuilder.Redirect.appendTo(new File(redirectFile)));
+                        } else {
+                            pb.redirectOutput(ProcessBuilder.Redirect.to(new File(redirectFile)));
+                        }
                     } else {
                         pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
                     }
 
                     if (errorRedirectFile != null) {
-                        pb.redirectError(new File(errorRedirectFile));
+                        pb.redirectError(ProcessBuilder.Redirect.to(new File(errorRedirectFile)));
                     } else {
                         pb.redirectError(ProcessBuilder.Redirect.INHERIT);
                     }
@@ -238,7 +252,7 @@ public class Main {
                 } else {
                     String err = commandName + ": command not found";
                     if (errorRedirectFile != null) {
-                        PrintStream ps = new PrintStream(new FileOutputStream(errorRedirectFile));
+                        PrintStream ps = new PrintStream(new FileOutputStream(errorRedirectFile, false));
                         ps.println(err);
                         ps.close();
                     } else {
@@ -247,5 +261,6 @@ public class Main {
                 }
             }
         }
+        scanner.close();
     }
 }
