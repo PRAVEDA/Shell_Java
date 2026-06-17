@@ -102,31 +102,30 @@ public class Main {
             String redirectFile = null;
             String errorRedirectFile = null;
 
-            for (int i = 0; i < tokens.size(); i++) {
+           for (int i = 0; i < tokens.size(); i++) {
 
-                String token = tokens.get(i);
+    String token = tokens.get(i);
 
-                if (token.equals(">") || token.equals("1>")) {
+    if (token.equals(">") || token.equals("1>")) {
 
-                    if (i + 1 < tokens.size()) {
-                        redirectFile = tokens.get(i + 1);
-                        tokens = new ArrayList<>(tokens.subList(0, i));
-                    }
+        if (i + 1 < tokens.size()) {
+            redirectFile = tokens.get(i + 1);
+            tokens = new ArrayList<>(tokens.subList(0, i));
+        }
 
-                    break;
-                }
+        break;
+    }
 
-                if (token.equals("2>")) {
+    if (token.equals("2>")) {
 
-                    if (i + 1 < tokens.size()) {
-                        errorRedirectFile = tokens.get(i + 1);
-                        tokens = new ArrayList<>(tokens.subList(0, i));
-                    }
+        if (i + 1 < tokens.size()) {
+            errorRedirectFile = tokens.get(i + 1);
+            tokens = new ArrayList<>(tokens.subList(0, i));
+        }
 
-                    break;
-                }
-            }
-
+        break;
+    }
+}
             if (tokens.isEmpty()) {
                 continue;
             }
@@ -173,16 +172,7 @@ public class Main {
                 if (newDir.exists() && newDir.isDirectory()) {
                     currentDirectory = newDir.getCanonicalFile();
                 } else {
-
-                    String error = "cd: " + path + ": No such file or directory";
-
-                    if (errorRedirectFile != null) {
-                        PrintStream ps = new PrintStream(new FileOutputStream(errorRedirectFile));
-                        ps.println(error);
-                        ps.close();
-                    } else {
-                        System.out.println(error);
-                    }
+                    System.out.println("cd: " + path + ": No such file or directory");
                 }
             }
 
@@ -259,41 +249,39 @@ public class Main {
                     ProcessBuilder pb = new ProcessBuilder(tokens);
                     pb.directory(currentDirectory);
 
-                    if (redirectFile != null) {
-                        pb.redirectOutput(new File(redirectFile));
-                    }
+                  if (redirectFile != null) {
+    pb.redirectOutput(new File(redirectFile));
+}
 
-                    if (errorRedirectFile != null) {
-                        pb.redirectError(new File(errorRedirectFile));
-                    }
+if (errorRedirectFile != null) {
+    pb.redirectError(new File(errorRedirectFile));
+}
 
-                    if (redirectFile == null && errorRedirectFile == null) {
-                        pb.inheritIO();
-                    } else {
+if (redirectFile == null && errorRedirectFile == null) {
+    pb.inheritIO();
+} else {
+    if (redirectFile == null) {
+        pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+    }
 
-                        if (redirectFile == null) {
-                            pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
-                        }
-
-                        if (errorRedirectFile == null) {
-                            pb.redirectError(ProcessBuilder.Redirect.INHERIT);
-                        }
-                    }
+    if (errorRedirectFile == null) {
+        pb.redirectError(ProcessBuilder.Redirect.INHERIT);
+    }
+}
 
                     Process process = pb.start();
                     process.waitFor();
 
                 } else {
-
                     String error = commandName + ": command not found";
 
-                    if (errorRedirectFile != null) {
-                        PrintStream ps = new PrintStream(new FileOutputStream(errorRedirectFile));
-                        ps.println(error);
-                        ps.close();
-                    } else {
-                        System.out.println(error);
-                    }
+if (errorRedirectFile != null) {
+    PrintStream ps = new PrintStream(new FileOutputStream(errorRedirectFile));
+    ps.println(error);
+    ps.close();
+} else {
+    System.out.println(error);
+}
                 }
             }
         }
