@@ -90,17 +90,17 @@ public class Main {
     public static void main(String[] args) throws Exception {
         File currentDirectory = new File(System.getProperty("user.dir"));
 
-        // Set up JLine Terminal and LineReader
+        // Build terminal interface compatible with CodeCrafters test runner environment
         Terminal terminal = TerminalBuilder.builder()
                 .system(true)
-                .dumb(true) // Ensures test compliance across environments
+                .dumb(true) 
                 .build();
 
-        // Use a customized parser to prevent JLine from altering escape characters 
+        // Standardize string capture to keep JLine from dropping backslashes early
         DefaultParser parser = new DefaultParser();
         parser.setEscapeChars(new char[0]); 
 
-        // Set up autocomplete parameters for target built-in commands
+        // Matchable target built-ins
         StringsCompleter completer = new StringsCompleter("echo", "exit");
 
         LineReader reader = LineReaderBuilder.builder()
@@ -109,14 +109,14 @@ public class Main {
                 .parser(parser)
                 .build();
 
-        // Alter JLine options to enforce a standard space character trailing a successful match
+        // Enforce clean layout setups: complete word, append a space, and don't dump menu items
         reader.setOpt(LineReader.Option.AUTO_MENU);
         reader.setOpt(LineReader.Option.AUTO_LIST);
+        reader.setVariable(LineReader.DISABLE_COMPLETION, false);
 
         while (true) {
             String input;
             try {
-                // reader.readLine manages printing "$ " and capturing character hits, including TAB
                 input = reader.readLine("$ ");
             } catch (org.jline.reader.EndOfFileException | org.jline.reader.UserInterruptException e) {
                 break;
@@ -124,6 +124,12 @@ public class Main {
 
             if (input == null) {
                 break;
+            }
+
+            // Clean trailing/leading spaces before starting token checks
+            input = input.trim();
+            if (input.isEmpty()) {
+                continue;
             }
 
             List<String> tokens = new ArrayList<>(parseCommand(input));
@@ -164,7 +170,7 @@ public class Main {
                 }
             }
 
-            // Ensure redirect target files (and their parent dirs) exist
+            // Ensure redirect target files exist
             if (redirectFile != null) {
                 ensureFileExists(redirectFile);
             }
@@ -272,7 +278,6 @@ public class Main {
                     ProcessBuilder pb = new ProcessBuilder(tokens);
                     pb.directory(currentDirectory);
 
-                    // Handle Standard Output Redirection
                     if (redirectFile != null) {
                         if (isAppend) {
                             pb.redirectOutput(ProcessBuilder.Redirect.appendTo(new File(redirectFile)));
@@ -283,7 +288,6 @@ public class Main {
                         pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
                     }
 
-                    // Handle Standard Error Redirection (Supports Append)
                     if (errorRedirectFile != null) {
                         if (isErrorAppend) {
                             pb.redirectError(ProcessBuilder.Redirect.appendTo(new File(errorRedirectFile)));
