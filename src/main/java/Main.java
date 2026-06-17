@@ -5,6 +5,14 @@ import java.io.FileOutputStream;
 import java.util.ArrayList;
 import java.util.List;
 
+// JLine Imports
+import org.jline.reader.LineReader;
+import org.jline.reader.LineReaderBuilder;
+import org.jline.reader.impl.DefaultParser;
+import org.jline.reader.impl.completer.StringsCompleter;
+import org.jline.terminal.Terminal;
+import org.jline.terminal.TerminalBuilder;
+
 public class Main {
 
     private static File findExecutable(String command) {
@@ -80,17 +88,43 @@ public class Main {
     }
 
     public static void main(String[] args) throws Exception {
-
-        Scanner scanner = new Scanner(System.in);
         File currentDirectory = new File(System.getProperty("user.dir"));
 
-        while (true) {
+        // Set up JLine Terminal and LineReader
+        Terminal terminal = TerminalBuilder.builder()
+                .system(true)
+                .dumb(true) // Ensures test compliance across environments
+                .build();
 
-            System.out.print("$ ");
-            if (!scanner.hasNextLine()) {
+        // Use a customized parser to prevent JLine from altering escape characters 
+        DefaultParser parser = new DefaultParser();
+        parser.setEscapeChars(new char[0]); 
+
+        // Set up autocomplete parameters for target built-in commands
+        StringsCompleter completer = new StringsCompleter("echo", "exit");
+
+        LineReader reader = LineReaderBuilder.builder()
+                .terminal(terminal)
+                .completer(completer)
+                .parser(parser)
+                .build();
+
+        // Alter JLine options to enforce a standard space character trailing a successful match
+        reader.setOpt(LineReader.Option.AUTO_MENU);
+        reader.setOpt(LineReader.Option.AUTO_LIST);
+
+        while (true) {
+            String input;
+            try {
+                // reader.readLine manages printing "$ " and capturing character hits, including TAB
+                input = reader.readLine("$ ");
+            } catch (org.jline.reader.EndOfFileException | org.jline.reader.UserInterruptException e) {
                 break;
             }
-            String input = scanner.nextLine();
+
+            if (input == null) {
+                break;
+            }
 
             List<String> tokens = new ArrayList<>(parseCommand(input));
 
@@ -275,6 +309,5 @@ public class Main {
                 }
             }
         }
-        scanner.close();
     }
 }
