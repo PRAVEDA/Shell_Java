@@ -1,3 +1,10 @@
+Here is the complete, updated `Main.java` file that adds full support for **appending standard error (`2>>`)**.
+
+The changes include adding a `isErrorAppend` boolean flag during the parsing step, utilizing `new FileOutputStream(errorRedirectFile, true)` for built-in error outputs, and leveraging `ProcessBuilder.Redirect.appendTo()` for external command errors.
+
+Replace your entire file with this code:
+
+```java
 import java.util.Scanner;
 import java.io.File;
 import java.io.PrintStream;
@@ -97,8 +104,9 @@ public class Main {
             String redirectFile = null;
             String errorRedirectFile = null;
             boolean isAppend = false;
+            boolean isErrorAppend = false;
 
-            // Scan ALL tokens — handles >, 1>, >>, 1>>, and 2>
+            // Scan ALL tokens — handles >, 1>, >>, 1>>, 2>, and 2>>
             for (int i = 0; i < tokens.size(); i++) {
                 String token = tokens.get(i);
 
@@ -116,6 +124,13 @@ public class Main {
                     i--;
                 } else if (token.equals("2>") && i + 1 < tokens.size()) {
                     errorRedirectFile = tokens.get(i + 1);
+                    isErrorAppend = false;
+                    tokens.remove(i + 1);
+                    tokens.remove(i);
+                    i--;
+                } else if (token.equals("2>>") && i + 1 < tokens.size()) {
+                    errorRedirectFile = tokens.get(i + 1);
+                    isErrorAppend = true;
                     tokens.remove(i + 1);
                     tokens.remove(i);
                     i--;
@@ -170,7 +185,7 @@ public class Main {
                 } else {
                     String err = "cd: " + path + ": No such file or directory";
                     if (errorRedirectFile != null) {
-                        PrintStream ps = new PrintStream(new FileOutputStream(errorRedirectFile, false));
+                        PrintStream ps = new PrintStream(new FileOutputStream(errorRedirectFile, isErrorAppend));
                         ps.println(err);
                         ps.close();
                     } else {
@@ -230,6 +245,7 @@ public class Main {
                     ProcessBuilder pb = new ProcessBuilder(tokens);
                     pb.directory(currentDirectory);
 
+                    // Handle Standard Output Redirection
                     if (redirectFile != null) {
                         if (isAppend) {
                             pb.redirectOutput(ProcessBuilder.Redirect.appendTo(new File(redirectFile)));
@@ -240,8 +256,13 @@ public class Main {
                         pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
                     }
 
+                    // Handle Standard Error Redirection (Supports Append)
                     if (errorRedirectFile != null) {
-                        pb.redirectError(ProcessBuilder.Redirect.to(new File(errorRedirectFile)));
+                        if (isErrorAppend) {
+                            pb.redirectError(ProcessBuilder.Redirect.appendTo(new File(errorRedirectFile)));
+                        } else {
+                            pb.redirectError(ProcessBuilder.Redirect.to(new File(errorRedirectFile)));
+                        }
                     } else {
                         pb.redirectError(ProcessBuilder.Redirect.INHERIT);
                     }
@@ -252,7 +273,7 @@ public class Main {
                 } else {
                     String err = commandName + ": command not found";
                     if (errorRedirectFile != null) {
-                        PrintStream ps = new PrintStream(new FileOutputStream(errorRedirectFile, false));
+                        PrintStream ps = new PrintStream(new FileOutputStream(errorRedirectFile, isErrorAppend));
                         ps.println(err);
                         ps.close();
                     } else {
@@ -264,3 +285,5 @@ public class Main {
         scanner.close();
     }
 }
+
+```
