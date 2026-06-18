@@ -15,11 +15,13 @@ public class Main {
         int id;
         Process process;
         String commandStr;
+        String status; // "Running" or "Done"
 
         BackgroundJob(int id, Process process, String commandStr) {
             this.id = id;
             this.process = process;
             this.commandStr = commandStr;
+            this.status = "Running";
         }
     }
     
@@ -397,23 +399,31 @@ public class Main {
             System.out.flush();
 
         } else if (command.equals("jobs")) {
-            List<BackgroundJob> aliveJobs = new ArrayList<>();
+            // Update transitions from "Running" -> "Done"
             for (BackgroundJob job : activeJobs) {
-                if (job.process.isAlive()) {
-                    aliveJobs.add(job);
+                if (job.status.equals("Running") && !job.process.isAlive()) {
+                    job.status = "Done";
                 }
             }
 
-            for (int i = 0; i < aliveJobs.size(); i++) {
-                BackgroundJob job = aliveJobs.get(i);
+            // Print existing tracking records
+            for (int i = 0; i < activeJobs.size(); i++) {
+                BackgroundJob job = activeJobs.get(i);
                 char statusChar = ' ';
-                if (i == aliveJobs.size() - 1) {
+                if (i == activeJobs.size() - 1) {
                     statusChar = '+';
-                } else if (i == aliveJobs.size() - 2) {
+                } else if (i == activeJobs.size() - 2) {
                     statusChar = '-';
                 }
-                System.out.print("[" + job.id + "]" + statusChar + "  Running                 " + job.commandStr + " &\r\n");
+                
+                // Keep field width matching dynamically depending on status layout lengths
+                String formattedStatus = String.format("%-24s", job.status);
+                System.out.print("[" + job.id + "]" + statusChar + "  " + formattedStatus + job.commandStr + " &\r\n");
             }
+
+            // Evict printed "Done" items from the tracker queue
+            activeJobs.removeIf(job -> job.status.equals("Done"));
+
             System.out.print("$ ");
             System.out.flush();
             return;
