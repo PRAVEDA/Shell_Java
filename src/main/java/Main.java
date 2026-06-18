@@ -9,6 +9,22 @@ public class Main {
     private static final Map<String, String> completionRegistry = new HashMap<>();
     // Global counter for tracking background jobs
     private static final AtomicInteger jobCounter = new AtomicInteger(1);
+    
+    // Class to track running background jobs
+    static class BackgroundJob {
+        int id;
+        Process process;
+        String commandStr;
+
+        BackgroundJob(int id, Process process, String commandStr) {
+            this.id = id;
+            this.process = process;
+            this.commandStr = commandStr;
+        }
+    }
+    
+    // List to keep track of active background jobs
+    private static final List<BackgroundJob> activeJobs = new ArrayList<>();
 
     private static void setRawMode() {
         try {
@@ -381,8 +397,15 @@ public class Main {
             System.out.flush();
 
         } else if (command.equals("jobs")) {
+            // Print active background jobs matching formatting specifications
+            for (BackgroundJob job : activeJobs) {
+                if (job.process.isAlive()) {
+                    System.out.print("[" + job.id + "]+  Running                 " + job.commandStr + " &\r\n");
+                }
+            }
             System.out.print("$ ");
             System.out.flush();
+            return; // Explicitly stop executing to prevent bleeding out into other blocks
         } else {
             String execPath = findInPath(command);
             if (execPath == null) {
@@ -418,10 +441,14 @@ public class Main {
             Process p = pb.start();
             
             if (isBackgroundJob) {
-                // Background task: print info instantly and do not block with p.waitFor()
+                // Background task: print info instantly, register to jobs tracker, and do not block
                 int currentJobNumber = jobCounter.getAndIncrement();
                 long pid = p.pid();
                 System.out.print("[" + currentJobNumber + "] " + pid + "\r\n");
+                
+                // Construct the full string representing the executed background process command
+                String commandStr = String.join(" ", args);
+                activeJobs.add(new BackgroundJob(currentJobNumber, p, commandStr));
             } else {
                 // Foreground task: wait for execution to complete
                 p.waitFor();
