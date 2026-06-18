@@ -1,6 +1,7 @@
 import java.io.File;
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
@@ -15,9 +16,7 @@ public class Main {
 
         while (true) {
             int readByte = in.read();
-            if (readByte == -1) {
-                break; 
-            }
+            if (readByte == -1) break;
 
             char ch = (char) readByte;
 
@@ -25,16 +24,16 @@ public class Main {
                 consecutiveTabs++;
                 String currentStr = buffer.toString();
                 int lastSpaceIdx = currentStr.lastIndexOf(' ');
-                
+
                 if (lastSpaceIdx == -1) {
-                    // --- COMMAND COMPLETION ---
+                    // COMMAND COMPLETION
                     String prefix = currentStr;
                     if (!prefix.isEmpty()) {
                         List<String> commandMatches = findCommandMatches(prefix);
-                        
+
                         if (!commandMatches.isEmpty()) {
                             String commonPrefix = findLongestCommonPrefix(commandMatches);
-                            
+
                             if (commonPrefix.length() > prefix.length()) {
                                 buffer.setLength(0);
                                 buffer.append(commonPrefix);
@@ -67,10 +66,10 @@ public class Main {
                         System.out.print("\r\33[K$ " + buffer.toString() + "\007");
                     }
                 } else {
-                    // --- FILENAME COMPLETION ---
+                    // FILENAME COMPLETION
                     String prefix = currentStr.substring(lastSpaceIdx + 1);
                     if (!prefix.isEmpty()) {
-                        File currentDir = new File(".");
+                        File currentDir = new File(System.getProperty("user.dir"));
                         File[] files = currentDir.listFiles();
                         List<String> matches = new ArrayList<>();
 
@@ -113,27 +112,62 @@ public class Main {
                     }
                 }
                 System.out.flush();
-                continue;
-            } 
-            else if (ch == '\n' || ch == '\r') {
+
+            } else if (ch == '\n' || ch == '\r') {
                 consecutiveTabs = 0;
+                System.out.println();
                 String input = buffer.toString().trim();
-                
+                buffer.setLength(0);
+
                 if (!input.isEmpty()) {
                     executeCommand(input);
                 }
-                
-                buffer.setLength(0); 
-                
-                // FIX: Print the prompt without an immediate trailing space to align with layout expectations, 
-                // but flush cleanly so the terminal knows it's ready.
-                System.out.print("\n$ ");
+
+                System.out.print("$ ");
                 System.out.flush();
-            } 
-            else {
+
+            } else if (ch == 127 || ch == '\b') {
+                consecutiveTabs = 0;
+                if (buffer.length() > 0) {
+                    buffer.deleteCharAt(buffer.length() - 1);
+                    System.out.print("\b \b");
+                    System.out.flush();
+                }
+
+            } else {
                 consecutiveTabs = 0;
                 buffer.append(ch);
             }
+        }
+    }
+
+    private static void executeCommand(String input) {
+        String[] argsList = input.split("\\s+");
+        String command = argsList[0];
+
+        if (command.equals("exit")) {
+            System.exit(0);
+        } else if (command.equals("echo")) {
+            if (argsList.length > 1) {
+                System.out.println(String.join(" ", Arrays.copyOfRange(argsList, 1, argsList.length)));
+            } else {
+                System.out.println();
+            }
+        } else if (command.equals("pwd")) {
+            System.out.println(System.getProperty("user.dir"));
+        } else if (command.equals("type")) {
+            if (argsList.length > 1) {
+                String targetCommand = argsList[1];
+                if (targetCommand.equals("jobs") || targetCommand.equals("exit") ||
+                    targetCommand.equals("type") || targetCommand.equals("echo") ||
+                    targetCommand.equals("pwd")) {
+                    System.out.println(targetCommand + " is a shell builtin");
+                } else {
+                    System.out.println(targetCommand + ": not found");
+                }
+            }
+        } else {
+            System.out.println(command + ": command not found");
         }
     }
 
@@ -179,27 +213,5 @@ public class Main {
             }
         }
         return prefix;
-    }
-
-    private static void executeCommand(String input) {
-        String[] argsList = input.split("\\s+");
-        String command = argsList[0];
-
-        if (command.equals("exit")) {
-            System.exit(0);
-        } 
-        else if (command.equals("jobs") || command.equals("echo") || command.equals("pwd")) {
-            // Keep silent
-        } 
-        else if (command.equals("type")) {
-            if (argsList.length > 1) {
-                String targetCommand = argsList[1];
-                if (targetCommand.equals("jobs") || targetCommand.equals("exit") || targetCommand.equals("type") || targetCommand.equals("echo") || targetCommand.equals("pwd")) {
-                    System.out.println(targetCommand + " is a shell builtin");
-                } else {
-                    System.out.println(targetCommand + ": not found");
-                }
-            }
-        }
     }
 }
