@@ -11,8 +11,6 @@ public class Main {
 
         InputStream in = System.in;
         StringBuilder buffer = new StringBuilder();
-        
-        // Track the number of consecutive tab presses
         int consecutiveTabs = 0;
 
         while (true) {
@@ -43,19 +41,13 @@ public class Main {
                                 if (commandMatches.size() == 1) {
                                     buffer.append(" ");
                                 }
-                                // Reset tab count since we successfully moved forward
                                 consecutiveTabs = 0;
                                 System.out.print("\r\33[K$ " + buffer.toString());
                             } else {
-                                // Multiple matches, but we can't autocomplete any further characters
                                 if (consecutiveTabs == 1) {
-                                    // 1st Tab: Ring the bell
                                     System.out.print("\r\33[K$ " + buffer.toString() + "\007");
                                 } else if (consecutiveTabs >= 2) {
-                                    // 2nd Tab: Print all options
-                                    System.out.println(); // Drop to next line
-                                    
-                                    // Print options separated by 2 spaces
+                                    System.out.println();
                                     StringBuilder optionsLine = new StringBuilder();
                                     for (int i = 0; i < commandMatches.size(); i++) {
                                         optionsLine.append(commandMatches.get(i));
@@ -64,10 +56,8 @@ public class Main {
                                         }
                                     }
                                     System.out.println(optionsLine.toString());
-                                    
-                                    // Restore prompt and buffer line
                                     System.out.print("$ " + buffer.toString());
-                                    consecutiveTabs = 0; // Reset state
+                                    consecutiveTabs = 0;
                                 }
                             }
                         } else {
@@ -126,11 +116,14 @@ public class Main {
                 continue;
             } 
             else if (ch == '\n' || ch == '\r') {
-                consecutiveTabs = 0; // Reset tab tracking
+                consecutiveTabs = 0;
                 String input = buffer.toString().trim();
                 
                 if (!input.isEmpty()) {
                     executeCommand(input);
+                } else {
+                    // If enter is pressed on empty line, just print a newline
+                    System.out.println();
                 }
                 
                 buffer.setLength(0); 
@@ -138,7 +131,7 @@ public class Main {
                 System.out.flush();
             } 
             else {
-                consecutiveTabs = 0; // Reset tab tracking on any regular keystroke
+                consecutiveTabs = 0;
                 buffer.append(ch);
             }
         }
@@ -146,7 +139,8 @@ public class Main {
 
     private static List<String> findCommandMatches(String prefix) {
         List<String> matches = new ArrayList<>();
-        String[] builtins = {"exit", "jobs", "type"};
+        // FIX: Added "echo" and "pwd" to known shell builtins list
+        String[] builtins = {"exit", "jobs", "type", "echo", "pwd"};
         for (String b : builtins) {
             if (b.startsWith(prefix) && !matches.contains(b)) {
                 matches.add(b);
@@ -189,6 +183,7 @@ public class Main {
     }
 
     private static void executeCommand(String input) {
+        // Simple manual split that separates command and raw argument string safely
         String[] argsList = input.split("\\s+");
         String command = argsList[0];
 
@@ -198,10 +193,18 @@ public class Main {
         else if (command.equals("jobs")) {
             // Empty implementation
         } 
+        else if (command.equals("echo")) {
+            // Echo back everything following the command name
+            if (input.length() > 5) {
+                System.out.println(input.substring(5));
+            } else {
+                System.out.println();
+            }
+        }
         else if (command.equals("type")) {
             if (argsList.length > 1) {
                 String targetCommand = argsList[1];
-                if (targetCommand.equals("jobs") || targetCommand.equals("exit") || targetCommand.equals("type")) {
+                if (targetCommand.equals("jobs") || targetCommand.equals("exit") || targetCommand.equals("type") || targetCommand.equals("echo") || targetCommand.equals("pwd")) {
                     System.out.println(targetCommand + " is a shell builtin");
                 } else {
                     System.out.println(targetCommand + ": not found");
