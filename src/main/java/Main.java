@@ -1,11 +1,14 @@
 import java.io.*;
 import java.util.*;
 import java.nio.file.*;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class Main {
 
     // Global registry for programmable completions
     private static final Map<String, String> completionRegistry = new HashMap<>();
+    // Global counter for tracking background jobs
+    private static final AtomicInteger jobCounter = new AtomicInteger(1);
 
     private static void setRawMode() {
         try {
@@ -237,6 +240,19 @@ public class Main {
             return;
         }
 
+        // Check if this command should run asynchronously in the background
+        boolean isBackgroundJob = false;
+        if (!args.isEmpty() && args.get(args.size() - 1).equals("&")) {
+            isBackgroundJob = true;
+            args.remove(args.size() - 1);
+        }
+
+        if (args.isEmpty()) {
+            System.out.print("$ ");
+            System.out.flush();
+            return;
+        }
+
         String command = args.get(0);
 
         String stdoutFile = null;
@@ -400,7 +416,17 @@ public class Main {
             }
 
             Process p = pb.start();
-            p.waitFor();
+            
+            if (isBackgroundJob) {
+                // Background task: print info instantly and do not block with p.waitFor()
+                int currentJobNumber = jobCounter.getAndIncrement();
+                long pid = p.pid();
+                System.out.print("[" + currentJobNumber + "] " + pid + "\r\n");
+            } else {
+                // Foreground task: wait for execution to complete
+                p.waitFor();
+            }
+            
             System.out.print("$ ");
             System.out.flush();
         }
