@@ -16,7 +16,8 @@ public class Main {
 
         while (true) {
             int readByte = in.read();
-            if (readByte == -1) break;
+            if (readByte == -1)
+                break;
 
             char ch = (char) readByte;
 
@@ -115,7 +116,6 @@ public class Main {
 
             } else if (ch == '\n' || ch == '\r') {
                 consecutiveTabs = 0;
-                System.out.println();
                 String input = buffer.toString().trim();
                 buffer.setLength(0);
 
@@ -159,8 +159,8 @@ public class Main {
             if (argsList.length > 1) {
                 String targetCommand = argsList[1];
                 if (targetCommand.equals("jobs") || targetCommand.equals("exit") ||
-                    targetCommand.equals("type") || targetCommand.equals("echo") ||
-                    targetCommand.equals("pwd")) {
+                        targetCommand.equals("type") || targetCommand.equals("echo") ||
+                        targetCommand.equals("pwd")) {
                     System.out.println(targetCommand + " is a shell builtin");
                 } else {
                     System.out.println(targetCommand + ": not found");
@@ -173,7 +173,7 @@ public class Main {
 
     private static List<String> findCommandMatches(String prefix) {
         List<String> matches = new ArrayList<>();
-        String[] builtins = {"exit", "jobs", "type", "echo", "pwd"};
+        String[] builtins = { "exit", "jobs", "type", "echo", "pwd" };
         for (String b : builtins) {
             if (b.startsWith(prefix) && !matches.contains(b)) {
                 matches.add(b);
@@ -204,12 +204,14 @@ public class Main {
     }
 
     private static String findLongestCommonPrefix(List<String> strs) {
-        if (strs == null || strs.isEmpty()) return "";
+        if (strs == null || strs.isEmpty())
+            return "";
         String prefix = strs.get(0);
         for (int i = 1; i < strs.size(); i++) {
             while (strs.get(i).indexOf(prefix) != 0) {
                 prefix = prefix.substring(0, prefix.length() - 1);
-                if (prefix.isEmpty()) return "";
+                if (prefix.isEmpty())
+                    return "";
             }
         }
         return prefix;
