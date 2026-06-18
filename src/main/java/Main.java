@@ -11,46 +11,70 @@ public class Main {
 
         InputStream in = System.in;
         StringBuilder buffer = new StringBuilder();
+        
+        // Track the number of consecutive tab presses
+        int consecutiveTabs = 0;
 
         while (true) {
             int readByte = in.read();
             if (readByte == -1) {
-                break;
+                break; 
             }
 
             char ch = (char) readByte;
 
             if (ch == '\t') {
+                consecutiveTabs++;
                 String currentStr = buffer.toString();
                 int lastSpaceIdx = currentStr.lastIndexOf(' ');
-                boolean printBell = false;
-
+                
                 if (lastSpaceIdx == -1) {
                     // --- COMMAND COMPLETION ---
                     String prefix = currentStr;
                     if (!prefix.isEmpty()) {
                         List<String> commandMatches = findCommandMatches(prefix);
-
+                        
                         if (!commandMatches.isEmpty()) {
                             String commonPrefix = findLongestCommonPrefix(commandMatches);
-
+                            
                             if (commonPrefix.length() > prefix.length()) {
                                 buffer.setLength(0);
                                 buffer.append(commonPrefix);
                                 if (commandMatches.size() == 1) {
                                     buffer.append(" ");
                                 }
+                                // Reset tab count since we successfully moved forward
+                                consecutiveTabs = 0;
+                                System.out.print("\r\33[K$ " + buffer.toString());
                             } else {
-                                // Multiple matches exist but they diverge immediately (e.g. cow, fox, bee)
-                                // Ring the bell!
-                                printBell = true;
+                                // Multiple matches, but we can't autocomplete any further characters
+                                if (consecutiveTabs == 1) {
+                                    // 1st Tab: Ring the bell
+                                    System.out.print("\r\33[K$ " + buffer.toString() + "\007");
+                                } else if (consecutiveTabs >= 2) {
+                                    // 2nd Tab: Print all options
+                                    System.out.println(); // Drop to next line
+                                    
+                                    // Print options separated by 2 spaces
+                                    StringBuilder optionsLine = new StringBuilder();
+                                    for (int i = 0; i < commandMatches.size(); i++) {
+                                        optionsLine.append(commandMatches.get(i));
+                                        if (i < commandMatches.size() - 1) {
+                                            optionsLine.append("  ");
+                                        }
+                                    }
+                                    System.out.println(optionsLine.toString());
+                                    
+                                    // Restore prompt and buffer line
+                                    System.out.print("$ " + buffer.toString());
+                                    consecutiveTabs = 0; // Reset state
+                                }
                             }
                         } else {
-                            // No matches found at all
-                            printBell = true;
+                            System.out.print("\r\33[K$ " + buffer.toString() + "\007");
                         }
                     } else {
-                        printBell = true;
+                        System.out.print("\r\33[K$ " + buffer.toString() + "\007");
                     }
                 } else {
                     // --- FILENAME COMPLETION ---
@@ -72,33 +96,49 @@ public class Main {
                             String matchedFilename = matches.get(0);
                             String remainder = matchedFilename.substring(prefix.length()) + " ";
                             buffer.append(remainder);
+                            consecutiveTabs = 0;
+                            System.out.print("\r\33[K$ " + buffer.toString());
+                        } else if (matches.size() > 1) {
+                            if (consecutiveTabs == 1) {
+                                System.out.print("\r\33[K$ " + buffer.toString() + "\007");
+                            } else if (consecutiveTabs >= 2) {
+                                Collections.sort(matches);
+                                System.out.println();
+                                StringBuilder optionsLine = new StringBuilder();
+                                for (int i = 0; i < matches.size(); i++) {
+                                    optionsLine.append(matches.get(i));
+                                    if (i < matches.size() - 1) {
+                                        optionsLine.append("  ");
+                                    }
+                                }
+                                System.out.println(optionsLine.toString());
+                                System.out.print("$ " + buffer.toString());
+                                consecutiveTabs = 0;
+                            }
                         } else {
-                            // 0 or multiple filename matches
-                            printBell = true;
+                            System.out.print("\r\33[K$ " + buffer.toString() + "\007");
                         }
                     } else {
-                        printBell = true;
+                        System.out.print("\r\33[K$ " + buffer.toString() + "\007");
                     }
-                }
-
-                // Clean the line and update display
-                System.out.print("\r\33[K$ " + buffer.toString());
-                if (printBell) {
-                    System.out.print("\007"); // Ring the terminal bell (\a)
                 }
                 System.out.flush();
                 continue;
-            } else if (ch == '\n' || ch == '\r') {
+            } 
+            else if (ch == '\n' || ch == '\r') {
+                consecutiveTabs = 0; // Reset tab tracking
                 String input = buffer.toString().trim();
-
+                
                 if (!input.isEmpty()) {
                     executeCommand(input);
                 }
-
-                buffer.setLength(0);
+                
+                buffer.setLength(0); 
                 System.out.print("$ ");
                 System.out.flush();
-            } else {
+            } 
+            else {
+                consecutiveTabs = 0; // Reset tab tracking on any regular keystroke
                 buffer.append(ch);
             }
         }
@@ -106,7 +146,7 @@ public class Main {
 
     private static List<String> findCommandMatches(String prefix) {
         List<String> matches = new ArrayList<>();
-        String[] builtins = { "exit", "jobs", "type" };
+        String[] builtins = {"exit", "jobs", "type"};
         for (String b : builtins) {
             if (b.startsWith(prefix) && !matches.contains(b)) {
                 matches.add(b);
@@ -137,14 +177,12 @@ public class Main {
     }
 
     private static String findLongestCommonPrefix(List<String> strs) {
-        if (strs == null || strs.isEmpty())
-            return "";
+        if (strs == null || strs.isEmpty()) return "";
         String prefix = strs.get(0);
         for (int i = 1; i < strs.size(); i++) {
             while (strs.get(i).indexOf(prefix) != 0) {
                 prefix = prefix.substring(0, prefix.length() - 1);
-                if (prefix.isEmpty())
-                    return "";
+                if (prefix.isEmpty()) return "";
             }
         }
         return prefix;
@@ -156,9 +194,11 @@ public class Main {
 
         if (command.equals("exit")) {
             System.exit(0);
-        } else if (command.equals("jobs")) {
+        } 
+        else if (command.equals("jobs")) {
             // Empty implementation
-        } else if (command.equals("type")) {
+        } 
+        else if (command.equals("type")) {
             if (argsList.length > 1) {
                 String targetCommand = argsList[1];
                 if (targetCommand.equals("jobs") || targetCommand.equals("exit") || targetCommand.equals("type")) {
@@ -167,7 +207,8 @@ public class Main {
                     System.out.println(targetCommand + ": not found");
                 }
             }
-        } else {
+        } 
+        else {
             System.out.println(input + ": command not found");
         }
     }
