@@ -26,7 +26,7 @@
                             <mainClass>Main</mainClass>
                         </manifest>
                     </archive>
-                    <finalName>shell</finalName>
+                    <finalName>codecrafters-shell</finalName>
                 </configuration>
             </plugin>
         </plugins>
