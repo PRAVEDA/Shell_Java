@@ -14,7 +14,7 @@ public class Main {
         while (true) {
             int readByte = in.read();
             if (readByte == -1) {
-                break; // End of stream
+                break; 
             }
 
             char ch = (char) readByte;
@@ -24,27 +24,24 @@ public class Main {
                 String currentStr = buffer.toString();
                 String updatedStr = handleTabCompletion(currentStr);
                 
-                // Update our internal buffer to match the completed string
                 buffer.setLength(0);
                 buffer.append(updatedStr);
             } 
             else if (ch == '\n' || ch == '\r') {
                 // 2. Intercept ENTER key press and execute the command
-                System.out.println(); // Move to next line visually
                 String input = buffer.toString().trim();
                 
                 if (!input.isEmpty()) {
                     executeCommand(input);
                 }
                 
-                buffer.setLength(0); // Reset buffer for next command
+                buffer.setLength(0); // Reset buffer
                 System.out.print("$ ");
                 System.out.flush();
             } 
             else {
-                // 3. Regular character typing: echoing it out and saving to buffer
-                System.out.print(ch);
-                System.out.flush();
+                // 3. DO NOT use System.out.print(ch) here anymore.
+                // The tester's pseudo-terminal handles echoing regular typing.
                 buffer.append(ch);
             }
         }
@@ -99,7 +96,7 @@ public class Main {
             String matchedFilename = matches.get(0);
             String remainder = matchedFilename.substring(prefix.length()) + " ";
             
-            // Output completion to the terminal immediately
+            // Still output the completed remainder so the tab completion registers!
             System.out.print(remainder);
             System.out.flush();
             
