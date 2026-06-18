@@ -327,7 +327,7 @@ public class Main {
                 if (!result.isEmpty()) System.out.print(result + "\r\n");
             }
             System.out.print("$ ");
-            System.out.flush();
+            System.flush();
             return;
         }
 
@@ -345,7 +345,7 @@ public class Main {
                 System.out.print(output + "\r\n");
             }
             System.out.print("$ ");
-            System.out.flush();
+            System.flush();
 
         } else if (command.equals("pwd")) {
             String output = System.getProperty("user.dir");
@@ -357,7 +357,7 @@ public class Main {
                 System.out.print(output + "\r\n");
             }
             System.out.print("$ ");
-            System.out.flush();
+            System.flush();
 
         } else if (command.equals("type")) {
             String result = "";
@@ -379,7 +379,7 @@ public class Main {
                 System.out.print(result + "\r\n");
             }
             System.out.print("$ ");
-            System.out.flush();
+            System.flush();
 
         } else if (command.equals("cd")) {
             String home = System.getenv("HOME");
@@ -397,15 +397,28 @@ public class Main {
             System.out.flush();
 
         } else if (command.equals("jobs")) {
-            // Print active background jobs matching formatting specifications
+            // Collect all jobs that are genuinely still active
+            List<BackgroundJob> aliveJobs = new ArrayList<>();
             for (BackgroundJob job : activeJobs) {
                 if (job.process.isAlive()) {
-                    System.out.print("[" + job.id + "]+  Running                 " + job.commandStr + " &\r\n");
+                    aliveJobs.add(job);
                 }
+            }
+
+            // Print each active background job with the precise dynamic status character mapping (+ / -)
+            for (int i = 0; i < aliveJobs.size(); i++) {
+                BackgroundJob job = aliveJobs.get(i);
+                char statusChar = ' ';
+                if (i == aliveJobs.size() - 1) {
+                    statusChar = '+';
+                } else if (i == aliveJobs.size() - 2) {
+                    statusChar = '-';
+                }
+                System.out.print("[" + job.id + "]" + statusChar + "  Running                 " + job.commandStr + " &\r\n");
             }
             System.out.print("$ ");
             System.out.flush();
-            return; // Explicitly stop executing to prevent bleeding out into other blocks
+            return;
         } else {
             String execPath = findInPath(command);
             if (execPath == null) {
