@@ -200,6 +200,14 @@ public class Main {
         if (f.getParentFile() != null) f.getParentFile().mkdirs();
     }
 
+    // Create redirect file (and parent dirs) if path is non-null, even if nothing is written
+    private static void ensureRedirectFile(String filePath, boolean append) throws IOException {
+        if (filePath == null) return;
+        ensureParentDirs(filePath);
+        // Open in append mode so existing content is preserved; creates file if absent
+        new FileWriter(filePath, append).close();
+    }
+
     private static void executeCommand(String input) throws Exception {
         ParsedCommand parsed = parseCommand(input);
         List<String> args = parsed.args;
@@ -235,6 +243,7 @@ public class Main {
             String output = args.size() > 1
                 ? String.join(" ", args.subList(1, args.size()))
                 : "";
+            ensureRedirectFile(stderrFile, stderrAppend); // create even if empty
             if (stdoutFile != null) {
                 ensureParentDirs(stdoutFile);
                 try (PrintWriter pw = new PrintWriter(new FileWriter(stdoutFile, stdoutAppend))) {
@@ -248,6 +257,7 @@ public class Main {
 
         } else if (command.equals("pwd")) {
             String output = System.getProperty("user.dir");
+            ensureRedirectFile(stderrFile, stderrAppend);
             if (stdoutFile != null) {
                 ensureParentDirs(stdoutFile);
                 try (PrintWriter pw = new PrintWriter(new FileWriter(stdoutFile, stdoutAppend))) {
@@ -271,6 +281,7 @@ public class Main {
                     result = found != null ? targetCommand + " is " + found : targetCommand + ": not found";
                 }
             }
+            ensureRedirectFile(stderrFile, stderrAppend);
             if (stdoutFile != null) {
                 ensureParentDirs(stdoutFile);
                 try (PrintWriter pw = new PrintWriter(new FileWriter(stdoutFile, stdoutAppend))) {
