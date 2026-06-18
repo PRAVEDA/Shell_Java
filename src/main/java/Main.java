@@ -5,7 +5,6 @@ import java.nio.file.*;
 public class Main {
 
     // Global registry for programmable completions
-    // Key: command name (e.g., "git"), Value: completion script/handler path
     private static final Map<String, String> completionRegistry = new HashMap<>();
 
     private static void setRawMode() {
@@ -47,7 +46,6 @@ public class Main {
                 consecutiveTabs++;
                 String currentStr = buffer.toString();
                 
-                // Track positions for programmable context
                 int compPoint = currentStr.length();
                 int lastSpaceIdx = currentStr.lastIndexOf(' ');
                 boolean isCommandMode = (lastSpaceIdx == -1);
@@ -57,7 +55,6 @@ public class Main {
                 
                 List<String> matches = new ArrayList<>();
 
-                // Check if a programmable custom completer exists for this command
                 if (!isCommandMode && completionRegistry.containsKey(firstWord)) {
                     matches = findProgrammableMatches(firstWord, currentStr, compPoint, prefix);
                 } else if (isCommandMode) {
@@ -81,9 +78,8 @@ public class Main {
                         System.out.print("\r\33[K$ " + buffer.toString());
                     } else {
                         if (consecutiveTabs == 1) {
-                            System.out.print("\007"); // Handling no unique progress -> Ring bell
+                            System.out.print("\007");
                         } else if (consecutiveTabs >= 2) {
-                            // Double tab display options
                             System.out.print("\r\n");
                             StringBuilder optionsLine = new StringBuilder();
                             for (int i = 0; i < matches.size(); i++) {
@@ -107,7 +103,7 @@ public class Main {
                         }
                     }
                 } else {
-                    System.out.print("\007"); // Handling no completions -> Ring bell
+                    System.out.print("\007");
                     consecutiveTabs = 0;
                 }
                 System.out.flush();
@@ -229,6 +225,9 @@ public class Main {
     }
 
     private static void executeCommand(String input) throws Exception {
+        // Fallback-parse specifically for the complete builtin to protect against custom tokenizer issues
+        String[] rawParts = input.trim().split("\\s+");
+        
         ParsedCommand parsed = parseCommand(input);
         List<String> args = parsed.args;
         List<Redirect> redirects = parsed.redirects;
@@ -254,24 +253,36 @@ public class Main {
         }
 
         // ── COMPLETE BUILTIN LOGIC ──────────────────────────────────────────
-        if (command.equals("complete")) {
+        if (command.equals("complete") || (rawParts.length > 0 && rawParts[0].equals("complete"))) {
             String result = "";
-            if (args.size() == 1) {
-                // Printing registered completions
+            String[] activeArgs = (rawParts.length > args.size()) ? rawParts : args.toArray(new String[0]);
+            
+            if (activeArgs.length == 1) {
                 List<String> lines = new ArrayList<>();
                 for (Map.Entry<String, String> entry : completionRegistry.entrySet()) {
                     lines.add("complete -c " + entry.getKey() + " " + entry.getValue());
                 }
                 Collections.sort(lines);
                 result = String.join("\r\n", lines);
-            } else if (args.size() == 3 && args.get(1).equals("-r")) {
-                // Unregister a completion spec
-                completionRegistry.remove(args.get(2));
-            } else if (args.size() == 4 && args.get(1).equals("-c")) {
-                // Register complete builtin
-                completionRegistry.put(args.get(2), args.get(3));
+            } else if (activeArgs.length == 3 && activeArgs[1].equals("-r")) {
+                completionRegistry.remove(activeArgs[2]);
+            } else if (activeArgs.length == 4 && activeArgs[1].equals("-c")) {
+                completionRegistry.put(activeArgs[2], activeArgs[3]);
+            } else if (activeArgs.length == 3 && activeArgs[1].equals("-p")) {
+                String targetCmd = activeArgs[2];
+                if (completionRegistry.containsKey(targetCmd)) {
+                    result = "complete -c " + targetCmd + " " + completionRegistry.get(targetCmd);
+                } else {
+                    result = "complete: " + targetCmd + ": no completion specification";
+                }
+            } else if (activeArgs.length == 2) {
+                String targetCmd = activeArgs[1];
+                if (completionRegistry.containsKey(targetCmd)) {
+                    result = "complete -c " + targetCmd + " " + completionRegistry.get(targetCmd);
+                } else {
+                    result = "complete: " + targetCmd + ": no completion specification";
+                }
             } else {
-                // Printing missing specification errors
                 result = "complete: usage: complete -c command completion_script or complete -r command";
             }
 
@@ -468,21 +479,19 @@ public class Main {
         return matches;
     }
 
-    // ── PROGRAMMABLE COMPLETION CALLOUT ENGINE ──────────────────────────────
     private static List<String> findProgrammableMatches(String cmd, String currentLine, int compPoint, String prefix) {
         List<String> matches = new ArrayList<>();
         String scriptPath = completionRegistry.get(cmd);
         if (scriptPath == null) return matches;
 
         try {
-            // Split up current line to match arguments
             List<String> cmdTokens = tokenize(currentLine);
             List<String> processArgs = new ArrayList<>();
             processArgs.add(scriptPath);
             processArgs.add(cmd);
             processArgs.add(prefix);
             if (cmdTokens.size() > 1) {
-                processArgs.add(cmdTokens.get(cmdTokens.size() - 2)); // Passing previous argument context
+                processArgs.add(cmdTokens.get(cmdTokens.size() - 2));
             } else {
                 processArgs.add("");
             }
@@ -490,14 +499,12 @@ public class Main {
             ProcessBuilder pb = new ProcessBuilder(processArgs);
             pb.directory(new File(System.getProperty("user.dir")));
 
-            // Passing standard environment variables requested by testing assertions
             Map<String, String> env = pb.environment();
             env.put("COMP_LINE", currentLine);
             env.put("COMP_POINT", String.valueOf(compPoint));
 
             Process p = pb.start();
             
-            // Read lines generated by completion tool script output
             try (BufferedReader reader = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
                 String line;
                 while ((line = reader.readLine()) != null) {
