@@ -116,10 +116,14 @@ public class Main {
                 String input = buffer.toString().trim();
                 buffer.setLength(0);
 
+                // Print the newline HERE, before executing - so tester sees clean prompt line
+                System.out.print("\r\n");
+                System.out.flush();
+
                 if (!input.isEmpty()) {
                     executeCommand(input);
                 } else {
-                    System.out.print("\r\n$ ");
+                    System.out.print("$ ");
                     System.out.flush();
                 }
 
@@ -148,10 +152,11 @@ public class Main {
             String output = argsList.length > 1
                 ? String.join(" ", Arrays.copyOfRange(argsList, 1, argsList.length))
                 : "";
-            System.out.print("\r\n" + output + "\r\n$ ");
+            // No leading \r\n here — already printed in main loop
+            System.out.print(output + "\r\n$ ");
             System.out.flush();
         } else if (command.equals("pwd")) {
-            System.out.print("\r\n" + System.getProperty("user.dir") + "\r\n$ ");
+            System.out.print(System.getProperty("user.dir") + "\r\n$ ");
             System.out.flush();
         } else if (command.equals("type")) {
             String result = "";
@@ -165,10 +170,10 @@ public class Main {
                     result = targetCommand + ": not found";
                 }
             }
-            System.out.print("\r\n" + result + "\r\n$ ");
+            System.out.print(result + "\r\n$ ");
             System.out.flush();
         } else {
-            System.out.print("\r\n" + command + ": command not found\r\n$ ");
+            System.out.print(command + ": command not found\r\n$ ");
             System.out.flush();
         }
     }
