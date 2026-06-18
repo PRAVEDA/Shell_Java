@@ -57,7 +57,7 @@ public class Main {
 
         if (prefix.isEmpty()) return currentBuffer;
 
-        File currentDir = new File(".");
+        File currentDir = new File(System.getProperty("user.dir"));
         File[] files = currentDir.listFiles();
         List<String> matches = new ArrayList<>();
 
