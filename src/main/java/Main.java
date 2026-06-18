@@ -1,16 +1,46 @@
 import java.io.File;
+import java.io.FileDescriptor;
+import java.io.FileInputStream;
 import java.io.InputStream;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
 public class Main {
+
+    // Disable terminal echo + canonical mode via stty called as a subprocess
+    private static void setRawMode() {
+        try {
+            new ProcessBuilder("stty", "-icanon", "-echo", "min", "1", "time", "0")
+                .inheritIO()
+                .start()
+                .waitFor();
+        } catch (Exception e) {
+            // ignore
+        }
+    }
+
+    private static void restoreMode() {
+        try {
+            new ProcessBuilder("stty", "icanon", "echo")
+                .inheritIO()
+                .start()
+                .waitFor();
+        } catch (Exception e) {
+            // ignore
+        }
+    }
+
     public static void main(String[] args) throws Exception {
+        setRawMode();
+        Runtime.getRuntime().addShutdownHook(new Thread(Main::restoreMode));
+
         System.out.print("$ ");
         System.out.flush();
 
-        InputStream in = System.in;
+        InputStream in = new FileInputStream(FileDescriptor.in);
         StringBuilder buffer = new StringBuilder();
         int consecutiveTabs = 0;
 
@@ -44,7 +74,7 @@ public class Main {
                                 System.out.print("\r\33[K$ " + buffer.toString());
                             } else {
                                 if (consecutiveTabs == 1) {
-                                    System.out.print("\r\33[K$ " + buffer.toString() + "\007");
+                                    System.out.print("\007");
                                 } else if (consecutiveTabs >= 2) {
                                     System.out.print("\r\n");
                                     StringBuilder optionsLine = new StringBuilder();
@@ -59,10 +89,10 @@ public class Main {
                                 }
                             }
                         } else {
-                            System.out.print("\r\33[K$ " + buffer.toString() + "\007");
+                            System.out.print("\007");
                         }
                     } else {
-                        System.out.print("\r\33[K$ " + buffer.toString() + "\007");
+                        System.out.print("\007");
                     }
                 } else {
                     // FILENAME COMPLETION
@@ -88,7 +118,7 @@ public class Main {
                             System.out.print("\r\33[K$ " + buffer.toString());
                         } else if (matches.size() > 1) {
                             if (consecutiveTabs == 1) {
-                                System.out.print("\r\33[K$ " + buffer.toString() + "\007");
+                                System.out.print("\007");
                             } else if (consecutiveTabs >= 2) {
                                 Collections.sort(matches);
                                 System.out.print("\r\n");
@@ -103,10 +133,10 @@ public class Main {
                                 consecutiveTabs = 0;
                             }
                         } else {
-                            System.out.print("\r\33[K$ " + buffer.toString() + "\007");
+                            System.out.print("\007");
                         }
                     } else {
-                        System.out.print("\r\33[K$ " + buffer.toString() + "\007");
+                        System.out.print("\007");
                     }
                 }
                 System.out.flush();
@@ -116,7 +146,7 @@ public class Main {
                 String input = buffer.toString().trim();
                 buffer.setLength(0);
 
-                // Print the newline HERE, before executing - so tester sees clean prompt line
+                // We control the newline - do NOT let the terminal echo it
                 System.out.print("\r\n");
                 System.out.flush();
 
@@ -136,8 +166,11 @@ public class Main {
                 }
 
             } else {
+                // Echo is OFF - we must echo every printable character ourselves
                 consecutiveTabs = 0;
                 buffer.append(ch);
+                System.out.print(ch);
+                System.out.flush();
             }
         }
     }
@@ -147,12 +180,12 @@ public class Main {
         String command = argsList[0];
 
         if (command.equals("exit")) {
+            restoreMode();
             System.exit(0);
         } else if (command.equals("echo")) {
             String output = argsList.length > 1
                 ? String.join(" ", Arrays.copyOfRange(argsList, 1, argsList.length))
                 : "";
-            // No leading \r\n here — already printed in main loop
             System.out.print(output + "\r\n$ ");
             System.out.flush();
         } else if (command.equals("pwd")) {
