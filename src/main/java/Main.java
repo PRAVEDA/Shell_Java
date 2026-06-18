@@ -118,7 +118,7 @@ public class Main {
                 consecutiveTabs = 0;
                 String input = buffer.toString().trim();
                 buffer.setLength(0);
-                System.out.println();
+                System.out.flush();
 
                 if (!input.isEmpty()) {
                     executeCommand(input);
