@@ -4,6 +4,10 @@ import java.nio.file.*;
 
 public class Main {
 
+    // Global registry for programmable completions
+    // Key: command name (e.g., "git"), Value: completion script/handler path
+    private static final Map<String, String> completionRegistry = new HashMap<>();
+
     private static void setRawMode() {
         try {
             new ProcessBuilder("stty", "-icanon", "-echo", "min", "1", "time", "0")
@@ -43,14 +47,20 @@ public class Main {
                 consecutiveTabs++;
                 String currentStr = buffer.toString();
                 
-                // Determine if we are auto-completing the first word (command) or a subsequent word (argument)
+                // Track positions for programmable context
+                int compPoint = currentStr.length();
                 int lastSpaceIdx = currentStr.lastIndexOf(' ');
                 boolean isCommandMode = (lastSpaceIdx == -1);
                 
+                String firstWord = isCommandMode ? currentStr : currentStr.substring(0, currentStr.indexOf(' '));
                 String prefix = isCommandMode ? currentStr : currentStr.substring(lastSpaceIdx + 1);
-                List<String> matches;
+                
+                List<String> matches = new ArrayList<>();
 
-                if (isCommandMode) {
+                // Check if a programmable custom completer exists for this command
+                if (!isCommandMode && completionRegistry.containsKey(firstWord)) {
+                    matches = findProgrammableMatches(firstWord, currentStr, compPoint, prefix);
+                } else if (isCommandMode) {
                     matches = findCommandMatches(prefix);
                 } else {
                     matches = findFileMatches(prefix);
@@ -59,37 +69,37 @@ public class Main {
                 if (!matches.isEmpty()) {
                     String commonPrefix = findLongestCommonPrefix(matches);
                     
-                    // If there's an extended common prefix we can auto-fill right away
                     if (commonPrefix.length() > prefix.length()) {
                         String autoCompletedSegment = commonPrefix.substring(prefix.length());
                         buffer.append(autoCompletedSegment);
                         
-                        // If it's a unique match and NOT an open directory, add a finishing trailing space
                         if (matches.size() == 1 && !commonPrefix.endsWith("/")) {
                             buffer.append(" ");
                         }
                         
-                        consecutiveTabs = 0; // reset tab sequence
+                        consecutiveTabs = 0;
                         System.out.print("\r\33[K$ " + buffer.toString());
                     } else {
-                        // No extra text can be uniquely deduced
                         if (consecutiveTabs == 1) {
-                            System.out.print("\007"); // Ring bell
+                            System.out.print("\007"); // Handling no unique progress -> Ring bell
                         } else if (consecutiveTabs >= 2) {
                             // Double tab display options
                             System.out.print("\r\n");
                             StringBuilder optionsLine = new StringBuilder();
                             for (int i = 0; i < matches.size(); i++) {
                                 String cleanDisplay = matches.get(i);
-                                // Strip parent paths out if presenting file/dir options to match shell UX
-                                if (!isCommandMode && cleanDisplay.contains("/")) {
+                                if (isCommandMode || completionRegistry.containsKey(firstWord)) {
+                                    optionsLine.append(cleanDisplay);
+                                } else if (cleanDisplay.contains("/")) {
                                     boolean trailingSlash = cleanDisplay.endsWith("/");
                                     String[] parts = cleanDisplay.split("/");
                                     if (parts.length > 0) {
                                         cleanDisplay = parts[parts.length - 1] + (trailingSlash ? "/" : "");
                                     }
+                                    optionsLine.append(cleanDisplay);
+                                } else {
+                                    optionsLine.append(cleanDisplay);
                                 }
-                                optionsLine.append(cleanDisplay);
                                 if (i < matches.size() - 1) optionsLine.append("  ");
                             }
                             System.out.print(optionsLine.toString() + "\r\n$ " + buffer.toString());
@@ -97,7 +107,7 @@ public class Main {
                         }
                     }
                 } else {
-                    System.out.print("\007"); // No matches found -> Ring bell
+                    System.out.print("\007"); // Handling no completions -> Ring bell
                     consecutiveTabs = 0;
                 }
                 System.out.flush();
@@ -132,9 +142,8 @@ public class Main {
         }
     }
 
-    // ── Redirection descriptor ──────────────────────────────────────────────
     static class Redirect {
-        String type; // ">", ">>", "2>", "2>>"
+        String type;
         String file;
         Redirect(String type, String file) { this.type = type; this.file = file; }
     }
@@ -190,8 +199,7 @@ public class Main {
 
         for (int i = 0; i < tokens.size(); i++) {
             String t = tokens.get(i);
-            if (t.equals("2>>") || t.equals("1>>") || t.equals(">>")
-                    || t.equals("2>") || t.equals("1>") || t.equals(">")) {
+            if (t.equals("2>>") || t.equals("1>>") || t.equals(">>") || t.equals("2>") || t.equals("1>") || t.equals(">")) {
                 if (i + 1 < tokens.size()) {
                     String type = t.replace("1>>", ">>").replace("1>", ">");
                     redirects.add(new Redirect(type, tokens.get(++i)));
@@ -245,6 +253,42 @@ public class Main {
             if (r.type.equals("2>>")) { stderrFile = r.file; stderrAppend = true;  }
         }
 
+        // ── COMPLETE BUILTIN LOGIC ──────────────────────────────────────────
+        if (command.equals("complete")) {
+            String result = "";
+            if (args.size() == 1) {
+                // Printing registered completions
+                List<String> lines = new ArrayList<>();
+                for (Map.Entry<String, String> entry : completionRegistry.entrySet()) {
+                    lines.add("complete -c " + entry.getKey() + " " + entry.getValue());
+                }
+                Collections.sort(lines);
+                result = String.join("\r\n", lines);
+            } else if (args.size() == 3 && args.get(1).equals("-r")) {
+                // Unregister a completion spec
+                completionRegistry.remove(args.get(2));
+            } else if (args.size() == 4 && args.get(1).equals("-c")) {
+                // Register complete builtin
+                completionRegistry.put(args.get(2), args.get(3));
+            } else {
+                // Printing missing specification errors
+                result = "complete: usage: complete -c command completion_script or complete -r command";
+            }
+
+            ensureRedirectFile(stderrFile, stderrAppend);
+            if (stdoutFile != null) {
+                ensureParentDirs(stdoutFile);
+                try (PrintWriter pw = new PrintWriter(new FileWriter(stdoutFile, stdoutAppend))) { 
+                    if (!result.isEmpty()) pw.println(result); 
+                }
+            } else {
+                if (!result.isEmpty()) System.out.print(result + "\r\n");
+            }
+            System.out.print("$ ");
+            System.out.flush();
+            return;
+        }
+
         if (command.equals("exit")) {
             restoreMode();
             System.exit(0);
@@ -277,7 +321,7 @@ public class Main {
             String result = "";
             if (args.size() > 1) {
                 String targetCommand = args.get(1);
-                Set<String> builtinSet = new HashSet<>(Arrays.asList("jobs","exit","type","echo","pwd","cd"));
+                Set<String> builtinSet = new HashSet<>(Arrays.asList("complete","jobs","exit","type","echo","pwd","cd"));
                 if (builtinSet.contains(targetCommand)) {
                     result = targetCommand + " is a shell builtin";
                 } else {
@@ -311,7 +355,6 @@ public class Main {
             System.out.flush();
 
         } else if (command.equals("jobs")) {
-            // Stage #af3 target empty implementation
             System.out.print("$ ");
             System.out.flush();
         } else {
@@ -365,7 +408,7 @@ public class Main {
 
     private static List<String> findCommandMatches(String prefix) {
         List<String> matches = new ArrayList<>();
-        String[] builtins = {"exit", "jobs", "type", "echo", "pwd", "cd"};
+        String[] builtins = {"complete", "exit", "jobs", "type", "echo", "pwd", "cd"};
         for (String b : builtins) {
             if (b.startsWith(prefix) && !matches.contains(b)) matches.add(b);
         }
@@ -377,8 +420,7 @@ public class Main {
                     File[] files = dir.listFiles();
                     if (files != null) {
                         for (File f : files) {
-                            if (f.isFile() && f.canExecute() && f.getName().startsWith(prefix)
-                                && !matches.contains(f.getName())) {
+                            if (f.isFile() && f.canExecute() && f.getName().startsWith(prefix) && !matches.contains(f.getName())) {
                                 matches.add(f.getName());
                             }
                         }
@@ -390,24 +432,17 @@ public class Main {
         return matches;
     }
 
-    // ── FILE AND DIRECTORY COMPLETION ENGINE ─────────────────────────────────
     private static List<String> findFileMatches(String prefix) {
         List<String> matches = new ArrayList<>();
-        
-        // Target directory defaults to current shell working directory
         String baseDirStr = System.getProperty("user.dir");
         String searchPrefix = prefix;
 
-        // If the argument has path separators (nested matching), slice it up
         if (prefix.contains("/")) {
             int lastSlash = prefix.lastIndexOf('/');
             String pathSegment = prefix.substring(0, lastSlash + 1);
             searchPrefix = prefix.substring(lastSlash + 1);
             
-            File resolvedDir = new File(pathSegment).isAbsolute() 
-                ? new File(pathSegment) 
-                : new File(baseDirStr, pathSegment);
-                
+            File resolvedDir = new File(pathSegment).isAbsolute() ? new File(pathSegment) : new File(baseDirStr, pathSegment);
             try {
                 baseDirStr = resolvedDir.getCanonicalPath();
             } catch (IOException e) {
@@ -422,21 +457,59 @@ public class Main {
                 for (File f : files) {
                     if (f.getName().startsWith(searchPrefix)) {
                         String matchedName = f.getName();
-                        
-                        // Reconstruct original structure representation context
-                        String fullMatchPath = prefix.contains("/") 
-                            ? prefix.substring(0, prefix.lastIndexOf('/') + 1) + matchedName 
-                            : matchedName;
-                            
-                        // Append directory visual hints inside matches 
-                        if (f.isDirectory()) {
-                            fullMatchPath += "/";
-                        }
+                        String fullMatchPath = prefix.contains("/") ? prefix.substring(0, prefix.lastIndexOf('/') + 1) + matchedName : matchedName;
+                        if (f.isDirectory()) fullMatchPath += "/";
                         matches.add(fullMatchPath);
                     }
                 }
             }
         }
+        Collections.sort(matches);
+        return matches;
+    }
+
+    // ── PROGRAMMABLE COMPLETION CALLOUT ENGINE ──────────────────────────────
+    private static List<String> findProgrammableMatches(String cmd, String currentLine, int compPoint, String prefix) {
+        List<String> matches = new ArrayList<>();
+        String scriptPath = completionRegistry.get(cmd);
+        if (scriptPath == null) return matches;
+
+        try {
+            // Split up current line to match arguments
+            List<String> cmdTokens = tokenize(currentLine);
+            List<String> processArgs = new ArrayList<>();
+            processArgs.add(scriptPath);
+            processArgs.add(cmd);
+            processArgs.add(prefix);
+            if (cmdTokens.size() > 1) {
+                processArgs.add(cmdTokens.get(cmdTokens.size() - 2)); // Passing previous argument context
+            } else {
+                processArgs.add("");
+            }
+
+            ProcessBuilder pb = new ProcessBuilder(processArgs);
+            pb.directory(new File(System.getProperty("user.dir")));
+
+            // Passing standard environment variables requested by testing assertions
+            Map<String, String> env = pb.environment();
+            env.put("COMP_LINE", currentLine);
+            env.put("COMP_POINT", String.valueOf(compPoint));
+
+            Process p = pb.start();
+            
+            // Read lines generated by completion tool script output
+            try (BufferedReader reader = new BufferedReader(new InputStreamReader(p.getInputStream()))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    line = line.trim();
+                    if (!line.isEmpty() && line.startsWith(prefix)) {
+                        matches.add(line);
+                    }
+                }
+            }
+            p.waitFor();
+        } catch (Exception e) { }
+
         Collections.sort(matches);
         return matches;
     }
