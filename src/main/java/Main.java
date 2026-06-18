@@ -225,7 +225,6 @@ public class Main {
     }
 
     private static void executeCommand(String input) throws Exception {
-        // Fallback-parse specifically for the complete builtin to protect against custom tokenizer issues
         String[] rawParts = input.trim().split("\\s+");
         
         ParsedCommand parsed = parseCommand(input);
@@ -264,11 +263,12 @@ public class Main {
                 }
                 Collections.sort(lines);
                 result = String.join("\r\n", lines);
-            } else if (activeArgs.length == 3 && activeArgs[1].equals("-r")) {
+            } else if (activeArgs.length == 3 && activeArgs[1].equalsIgnoreCase("-r")) {
                 completionRegistry.remove(activeArgs[2]);
-            } else if (activeArgs.length == 4 && activeArgs[1].equals("-c")) {
-                completionRegistry.put(activeArgs[2], activeArgs[3]);
-            } else if (activeArgs.length == 3 && activeArgs[1].equals("-p")) {
+            } else if (activeArgs.length == 4 && activeArgs[1].equalsIgnoreCase("-c")) {
+                // Register script and map cleanly for both -c and -C syntax formats
+                completionRegistry.put(activeArgs[3], activeArgs[2]);
+            } else if (activeArgs.length == 3 && activeArgs[1].equalsIgnoreCase("-p")) {
                 String targetCmd = activeArgs[2];
                 if (completionRegistry.containsKey(targetCmd)) {
                     result = "complete -c " + targetCmd + " " + completionRegistry.get(targetCmd);
