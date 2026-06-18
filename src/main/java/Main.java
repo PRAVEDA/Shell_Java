@@ -22,25 +22,50 @@ public class Main {
             if (ch == '\t') {
                 // 1. Intercept TAB key press and run autocomplete
                 String currentStr = buffer.toString();
-                String updatedStr = handleTabCompletion(currentStr);
                 
-                buffer.setLength(0);
-                buffer.append(updatedStr);
+                int lastSpaceIdx = currentStr.lastIndexOf(' ');
+                String prefix = (lastSpaceIdx == -1) ? currentStr : currentStr.substring(lastSpaceIdx + 1);
+
+                if (!prefix.isEmpty()) {
+                    File currentDir = new File(".");
+                    File[] files = currentDir.listFiles();
+                    List<String> matches = new ArrayList<>();
+
+                    if (files != null) {
+                        for (File file : files) {
+                            if (file.getName().startsWith(prefix)) {
+                                matches.add(file.getName());
+                            }
+                        }
+                    }
+
+                    if (matches.size() == 1) {
+                        String matchedFilename = matches.get(0);
+                        String remainder = matchedFilename.substring(prefix.length()) + " ";
+                        
+                        // Update our internal buffer
+                        buffer.append(remainder);
+                        
+                        // 2. Wipe the line and reprint it clean to eliminate the tester's layout spaces
+                        // \r brings cursor to start, \33[K clears from cursor to end of line
+                        System.out.print("\r\33[K$ " + buffer.toString());
+                        System.out.flush();
+                        continue;
+                    }
+                }
             } 
             else if (ch == '\n' || ch == '\r') {
-                // 2. Intercept ENTER key press and execute the command
                 String input = buffer.toString().trim();
                 
                 if (!input.isEmpty()) {
                     executeCommand(input);
                 }
                 
-                buffer.setLength(0); // Reset buffer
+                buffer.setLength(0); 
                 System.out.print("$ ");
                 System.out.flush();
             } 
             else {
-                // 3. DO NOT use System.out.print(ch) here anymore.
                 // The tester's pseudo-terminal handles echoing regular typing.
                 buffer.append(ch);
             }
@@ -70,39 +95,5 @@ public class Main {
         else {
             System.out.println(input + ": command not found");
         }
-    }
-
-    public static String handleTabCompletion(String currentBuffer) {
-        int lastSpaceIdx = currentBuffer.lastIndexOf(' ');
-        String prefix = (lastSpaceIdx == -1) ? currentBuffer : currentBuffer.substring(lastSpaceIdx + 1);
-
-        if (prefix.isEmpty()) {
-            return currentBuffer;
-        }
-
-        File currentDir = new File(".");
-        File[] files = currentDir.listFiles();
-        List<String> matches = new ArrayList<>();
-
-        if (files != null) {
-            for (File file : files) {
-                if (file.getName().startsWith(prefix)) {
-                    matches.add(file.getName());
-                }
-            }
-        }
-
-        if (matches.size() == 1) {
-            String matchedFilename = matches.get(0);
-            String remainder = matchedFilename.substring(prefix.length()) + " ";
-            
-            // Still output the completed remainder so the tab completion registers!
-            System.out.print(remainder);
-            System.out.flush();
-            
-            return currentBuffer + remainder;
-        }
-
-        return currentBuffer;
     }
 }
