@@ -12,7 +12,6 @@ public class Main {
         int c;
         while ((c = in.read()) != -1) {
             if (c == '\n') {
-                // Enter pressed — process the command
                 System.out.println();
                 String input = buffer.toString().trim();
                 buffer.setLength(0);
@@ -29,13 +28,11 @@ public class Main {
                 System.out.flush();
 
             } else if (c == '\t') {
-                // Tab pressed — attempt completion
                 String completed = handleTabCompletion(buffer.toString());
                 buffer.setLength(0);
                 buffer.append(completed);
 
             } else if (c == 127 || c == '\b') {
-                // Backspace
                 if (buffer.length() > 0) {
                     buffer.deleteCharAt(buffer.length() - 1);
                     System.out.print("\b \b");
@@ -51,7 +48,6 @@ public class Main {
     }
 
     static void handleCommand(String input) {
-        // Placeholder — plug in your real dispatch logic here
         System.out.println(input + ": command not found");
     }
 
@@ -80,8 +76,6 @@ public class Main {
             return currentBuffer + remainder;
         }
 
-        // Optional: bell on ambiguous/no match
-        // System.out.print("\007"); System.out.flush();
         return currentBuffer;
     }
 }
