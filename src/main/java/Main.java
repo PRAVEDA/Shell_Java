@@ -1,46 +1,65 @@
-import java.io.File;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Scanner;
+import java.io.*;
+import java.util.*;
 
 public class Main {
     public static void main(String[] args) throws Exception {
-        // Unbuffered standard output to ensure CodeCrafters tester catches every print instantly
         System.out.print("$ ");
         System.out.flush();
 
-        // Standard reading loop (Adapt this to how your specific shell parses raw characters)
-        Scanner scanner = new Scanner(System.in);
-        while (scanner.hasNextLine()) {
-            String input = scanner.nextLine().trim();
-            
-            if (input.isEmpty()) {
+        InputStream in = System.in;
+        StringBuilder buffer = new StringBuilder();
+
+        int c;
+        while ((c = in.read()) != -1) {
+            if (c == '\n') {
+                // Enter pressed — process the command
+                System.out.println();
+                String input = buffer.toString().trim();
+                buffer.setLength(0);
+
+                if (!input.isEmpty()) {
+                    if (input.equals("exit 0")) {
+                        System.exit(0);
+                    } else {
+                        handleCommand(input);
+                    }
+                }
+
                 System.out.print("$ ");
                 System.out.flush();
-                continue;
-            }
 
-            // Simple command execution logic placeholder
-            if (input.equals("exit 0")) {
-                System.exit(0);
+            } else if (c == '\t') {
+                // Tab pressed — attempt completion
+                String completed = handleTabCompletion(buffer.toString());
+                buffer.setLength(0);
+                buffer.append(completed);
+
+            } else if (c == 127 || c == '\b') {
+                // Backspace
+                if (buffer.length() > 0) {
+                    buffer.deleteCharAt(buffer.length() - 1);
+                    System.out.print("\b \b");
+                    System.out.flush();
+                }
+
             } else {
-                System.out.println(input + ": command not found");
+                buffer.append((char) c);
+                System.out.print((char) c);
+                System.out.flush();
             }
-
-            System.out.print("$ ");
-            System.out.flush();
         }
     }
 
-    // Call this helper method inside your raw keypress processing loop when '\t' (Tab) is detected
+    static void handleCommand(String input) {
+        // Placeholder — plug in your real dispatch logic here
+        System.out.println(input + ": command not found");
+    }
+
     public static String handleTabCompletion(String currentBuffer) {
         int lastSpaceIdx = currentBuffer.lastIndexOf(' ');
         String prefix = (lastSpaceIdx == -1) ? currentBuffer : currentBuffer.substring(lastSpaceIdx + 1);
 
-        if (prefix.isEmpty()) {
-            return currentBuffer;
-        }
+        if (prefix.isEmpty()) return currentBuffer;
 
         File currentDir = new File(".");
         File[] files = currentDir.listFiles();
@@ -54,18 +73,15 @@ public class Main {
             }
         }
 
-        // Only complete if there is EXACTLY one match
         if (matches.size() == 1) {
-            String matchedFilename = matches.get(0);
-            String remainder = matchedFilename.substring(prefix.length()) + " ";
-            
-            // Output completion to the terminal immediately
+            String remainder = matches.get(0).substring(prefix.length()) + " ";
             System.out.print(remainder);
             System.out.flush();
-            
             return currentBuffer + remainder;
         }
 
+        // Optional: bell on ambiguous/no match
+        // System.out.print("\007"); System.out.flush();
         return currentBuffer;
     }
 }
