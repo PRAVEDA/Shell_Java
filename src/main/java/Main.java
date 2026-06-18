@@ -327,7 +327,7 @@ public class Main {
                 if (!result.isEmpty()) System.out.print(result + "\r\n");
             }
             System.out.print("$ ");
-            System.flush();
+            System.out.flush();
             return;
         }
 
@@ -345,7 +345,7 @@ public class Main {
                 System.out.print(output + "\r\n");
             }
             System.out.print("$ ");
-            System.flush();
+            System.out.flush();
 
         } else if (command.equals("pwd")) {
             String output = System.getProperty("user.dir");
@@ -357,7 +357,7 @@ public class Main {
                 System.out.print(output + "\r\n");
             }
             System.out.print("$ ");
-            System.flush();
+            System.out.flush();
 
         } else if (command.equals("type")) {
             String result = "";
@@ -379,7 +379,7 @@ public class Main {
                 System.out.print(result + "\r\n");
             }
             System.out.print("$ ");
-            System.flush();
+            System.out.flush();
 
         } else if (command.equals("cd")) {
             String home = System.getenv("HOME");
@@ -397,7 +397,6 @@ public class Main {
             System.out.flush();
 
         } else if (command.equals("jobs")) {
-            // Collect all jobs that are genuinely still active
             List<BackgroundJob> aliveJobs = new ArrayList<>();
             for (BackgroundJob job : activeJobs) {
                 if (job.process.isAlive()) {
@@ -405,7 +404,6 @@ public class Main {
                 }
             }
 
-            // Print each active background job with the precise dynamic status character mapping (+ / -)
             for (int i = 0; i < aliveJobs.size(); i++) {
                 BackgroundJob job = aliveJobs.get(i);
                 char statusChar = ' ';
@@ -454,16 +452,13 @@ public class Main {
             Process p = pb.start();
             
             if (isBackgroundJob) {
-                // Background task: print info instantly, register to jobs tracker, and do not block
                 int currentJobNumber = jobCounter.getAndIncrement();
                 long pid = p.pid();
                 System.out.print("[" + currentJobNumber + "] " + pid + "\r\n");
                 
-                // Construct the full string representing the executed background process command
                 String commandStr = String.join(" ", args);
                 activeJobs.add(new BackgroundJob(currentJobNumber, p, commandStr));
             } else {
-                // Foreground task: wait for execution to complete
                 p.waitFor();
             }
             
