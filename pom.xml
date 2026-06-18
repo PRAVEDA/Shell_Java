@@ -1,71 +1,34 @@
-import java.io.File;
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Scanner;
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
 
-public class Main {
-    public static void main(String[] args) throws Exception {
-        // Unbuffered standard output to ensure CodeCrafters tester catches every print instantly
-        System.out.print("$ ");
-        System.out.flush();
+    <groupId>com.codecrafters</groupId>
+    <artifactId>shell-java</artifactId>
+    <version>1.0-SNAPSHOT</version>
+    <packaging>jar</packaging>
 
-        // Standard reading loop (Adapt this to how your specific shell parses raw characters)
-        Scanner scanner = new Scanner(System.in);
-        while (scanner.hasNextLine()) {
-            String input = scanner.nextLine().trim();
-            
-            if (input.isEmpty()) {
-                System.out.print("$ ");
-                System.out.flush();
-                continue;
-            }
+    <properties>
+        <maven.compiler.source>11</maven.compiler.source>
+        <maven.compiler.target>11</maven.compiler.target>
+    </properties>
 
-            // Simple command execution logic placeholder
-            if (input.equals("exit 0")) {
-                System.exit(0);
-            } else {
-                System.out.println(input + ": command not found");
-            }
-
-            System.out.print("$ ");
-            System.out.flush();
-        }
-    }
-
-    // Call this helper method inside your raw keypress processing loop when '\t' (Tab) is detected
-    public static String handleTabCompletion(String currentBuffer) {
-        int lastSpaceIdx = currentBuffer.lastIndexOf(' ');
-        String prefix = (lastSpaceIdx == -1) ? currentBuffer : currentBuffer.substring(lastSpaceIdx + 1);
-
-        if (prefix.isEmpty()) {
-            return currentBuffer;
-        }
-
-        File currentDir = new File(".");
-        File[] files = currentDir.listFiles();
-        List<String> matches = new ArrayList<>();
-
-        if (files != null) {
-            for (File file : files) {
-                if (file.getName().startsWith(prefix)) {
-                    matches.add(file.getName());
-                }
-            }
-        }
-
-        // Only complete if there is EXACTLY one match
-        if (matches.size() == 1) {
-            String matchedFilename = matches.get(0);
-            String remainder = matchedFilename.substring(prefix.length()) + " ";
-            
-            // Output completion to the terminal immediately
-            System.out.print(remainder);
-            System.out.flush();
-            
-            return currentBuffer + remainder;
-        }
-
-        return currentBuffer;
-    }
-}
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <version>3.3.0</version>
+                <configuration>
+                    <archive>
+                        <manifest>
+                            <mainClass>Main</mainClass>
+                        </manifest>
+                    </archive>
+                    <finalName>shell</finalName>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>
