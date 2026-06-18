@@ -418,7 +418,8 @@ public class Main {
                 
                 // Keep field width matching dynamically depending on status layout lengths
                 String formattedStatus = String.format("%-24s", job.status);
-                System.out.print("[" + job.id + "]" + statusChar + "  " + formattedStatus + job.commandStr + " &\r\n");
+                String suffix = job.status.equals("Running") ? " &" : "";
+                System.out.print("[" + job.id + "]" + statusChar + "  " + formattedStatus + job.commandStr + suffix + "\r\n");
             }
 
             // Evict printed "Done" items from the tracker queue
