@@ -161,39 +161,94 @@ public class Main {
         }
     }
 
-    private static ParsedCommand parseCommand(String input) {
-        // Simple tokeniser (handles 2>>, 2>, >>, >)
-        String[] tokens = input.split("\\s+");
-        List<String> args = new ArrayList<>();
-        List<Redirect> redirects = new ArrayList<>();
+    private static List<String> tokenize(String input) {
+    List<String> tokens = new ArrayList<>();
+    StringBuilder current = new StringBuilder();
 
-        for (int i = 0; i < tokens.length; i++) {
-            String t = tokens[i];
-            if (t.equals("2>>") || t.equals("1>>") || t.equals(">>")
-                    || t.equals("2>") || t.equals("1>") || t.equals(">")) {
-                if (i + 1 < tokens.length) {
-                    // normalise 1>> -> >>  and  1> -> >
-                    String type = t.replace("1>>", ">>").replace("1>", ">");
-                    redirects.add(new Redirect(type, tokens[++i]));
-                }
-            } else if (t.startsWith("2>>")) {
-                redirects.add(new Redirect("2>>", t.substring(3)));
-            } else if (t.startsWith("2>")) {
-                redirects.add(new Redirect("2>", t.substring(2)));
-            } else if (t.startsWith("1>>")) {
-                redirects.add(new Redirect(">>", t.substring(3)));
-            } else if (t.startsWith("1>")) {
-                redirects.add(new Redirect(">", t.substring(2)));
-            } else if (t.startsWith(">>")) {
-                redirects.add(new Redirect(">>", t.substring(2)));
-            } else if (t.startsWith(">")) {
-                redirects.add(new Redirect(">", t.substring(1)));
-            } else {
-                args.add(t);
+    boolean inSingle = false;
+    boolean inDouble = false;
+
+    for (int i = 0; i < input.length(); i++) {
+        char c = input.charAt(i);
+
+        if (c == '\\' && !inSingle) {
+            if (i + 1 < input.length()) {
+                current.append(input.charAt(i + 1));
+                i++;
             }
+            continue;
         }
-        return new ParsedCommand(args, redirects);
+
+        if (c == '\'' && !inDouble) {
+            inSingle = !inSingle;
+            continue;
+        }
+
+        if (c == '"' && !inSingle) {
+            inDouble = !inDouble;
+            continue;
+        }
+
+        if (Character.isWhitespace(c) && !inSingle && !inDouble) {
+            if (current.length() > 0) {
+                tokens.add(current.toString());
+                current.setLength(0);
+            }
+        } else {
+            current.append(c);
+        }
     }
+
+    if (current.length() > 0) {
+        tokens.add(current.toString());
+    }
+
+    return tokens;
+}
+
+    private static ParsedCommand parseCommand(String input) {
+    List<String> tokens = tokenize(input);
+
+    List<String> args = new ArrayList<>();
+    List<Redirect> redirects = new ArrayList<>();
+
+    for (int i = 0; i < tokens.size(); i++) {
+        String t = tokens.get(i);
+
+        if (t.equals("2>>") || t.equals("1>>") || t.equals(">>")
+                || t.equals("2>") || t.equals("1>") || t.equals(">")) {
+
+            if (i + 1 < tokens.size()) {
+                String type = t.replace("1>>", ">>")
+                               .replace("1>", ">");
+                redirects.add(new Redirect(type, tokens.get(++i)));
+            }
+
+        } else if (t.startsWith("2>>")) {
+            redirects.add(new Redirect("2>>", t.substring(3)));
+
+        } else if (t.startsWith("2>")) {
+            redirects.add(new Redirect("2>", t.substring(2)));
+
+        } else if (t.startsWith("1>>")) {
+            redirects.add(new Redirect(">>", t.substring(3)));
+
+        } else if (t.startsWith("1>")) {
+            redirects.add(new Redirect(">", t.substring(2)));
+
+        } else if (t.startsWith(">>")) {
+            redirects.add(new Redirect(">>", t.substring(2)));
+
+        } else if (t.startsWith(">")) {
+            redirects.add(new Redirect(">", t.substring(1)));
+
+        } else {
+            args.add(t);
+        }
+    }
+
+    return new ParsedCommand(args, redirects);
+}
 
     private static void ensureParentDirs(String filePath) {
         File f = new File(filePath);
