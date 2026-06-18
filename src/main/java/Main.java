@@ -22,33 +22,38 @@ public class Main {
 
             if (ch == '\t') {
                 String currentStr = buffer.toString();
-
-                // 1. Separate commands from argument completions
                 int lastSpaceIdx = currentStr.lastIndexOf(' ');
+                boolean printBell = false;
 
                 if (lastSpaceIdx == -1) {
-                    // --- COMMAND COMPLETION (No spaces, completing the executable) ---
+                    // --- COMMAND COMPLETION ---
                     String prefix = currentStr;
                     if (!prefix.isEmpty()) {
                         List<String> commandMatches = findCommandMatches(prefix);
 
                         if (!commandMatches.isEmpty()) {
-                            // Find the longest common prefix among matches
                             String commonPrefix = findLongestCommonPrefix(commandMatches);
 
                             if (commonPrefix.length() > prefix.length()) {
                                 buffer.setLength(0);
                                 buffer.append(commonPrefix);
-
-                                // If there is exactly one match, append a trailing space
                                 if (commandMatches.size() == 1) {
                                     buffer.append(" ");
                                 }
+                            } else {
+                                // Multiple matches exist but they diverge immediately (e.g. cow, fox, bee)
+                                // Ring the bell!
+                                printBell = true;
                             }
+                        } else {
+                            // No matches found at all
+                            printBell = true;
                         }
+                    } else {
+                        printBell = true;
                     }
                 } else {
-                    // --- FILENAME COMPLETION (There is a space, completing arguments) ---
+                    // --- FILENAME COMPLETION ---
                     String prefix = currentStr.substring(lastSpaceIdx + 1);
                     if (!prefix.isEmpty()) {
                         File currentDir = new File(".");
@@ -67,12 +72,20 @@ public class Main {
                             String matchedFilename = matches.get(0);
                             String remainder = matchedFilename.substring(prefix.length()) + " ";
                             buffer.append(remainder);
+                        } else {
+                            // 0 or multiple filename matches
+                            printBell = true;
                         }
+                    } else {
+                        printBell = true;
                     }
                 }
 
                 // Clean the line and update display
                 System.out.print("\r\33[K$ " + buffer.toString());
+                if (printBell) {
+                    System.out.print("\007"); // Ring the terminal bell (\a)
+                }
                 System.out.flush();
                 continue;
             } else if (ch == '\n' || ch == '\r') {
@@ -91,11 +104,8 @@ public class Main {
         }
     }
 
-    // Helper to find executables in $PATH matching the prefix
     private static List<String> findCommandMatches(String prefix) {
         List<String> matches = new ArrayList<>();
-
-        // Add builtins matching prefix
         String[] builtins = { "exit", "jobs", "type" };
         for (String b : builtins) {
             if (b.startsWith(prefix) && !matches.contains(b)) {
@@ -103,7 +113,6 @@ public class Main {
             }
         }
 
-        // Add executables from $PATH matching prefix
         String pathEnv = System.getenv("PATH");
         if (pathEnv != null) {
             String[] paths = pathEnv.split(File.pathSeparator);
@@ -127,7 +136,6 @@ public class Main {
         return matches;
     }
 
-    // Helper to find the common prefix matching multiple options
     private static String findLongestCommonPrefix(List<String> strs) {
         if (strs == null || strs.isEmpty())
             return "";
