@@ -16,8 +16,7 @@ public class Main {
 
         while (true) {
             int readByte = in.read();
-            if (readByte == -1)
-                break;
+            if (readByte == -1) break;
 
             char ch = (char) readByte;
 
@@ -47,7 +46,7 @@ public class Main {
                                 if (consecutiveTabs == 1) {
                                     System.out.print("\r\33[K$ " + buffer.toString() + "\007");
                                 } else if (consecutiveTabs >= 2) {
-                                    System.out.println();
+                                    System.out.print("\r\n");
                                     StringBuilder optionsLine = new StringBuilder();
                                     for (int i = 0; i < commandMatches.size(); i++) {
                                         optionsLine.append(commandMatches.get(i));
@@ -55,8 +54,7 @@ public class Main {
                                             optionsLine.append("  ");
                                         }
                                     }
-                                    System.out.println(optionsLine.toString());
-                                    System.out.print("$ " + buffer.toString());
+                                    System.out.print(optionsLine.toString() + "\r\n$ " + buffer.toString());
                                     consecutiveTabs = 0;
                                 }
                             }
@@ -93,7 +91,7 @@ public class Main {
                                 System.out.print("\r\33[K$ " + buffer.toString() + "\007");
                             } else if (consecutiveTabs >= 2) {
                                 Collections.sort(matches);
-                                System.out.println();
+                                System.out.print("\r\n");
                                 StringBuilder optionsLine = new StringBuilder();
                                 for (int i = 0; i < matches.size(); i++) {
                                     optionsLine.append(matches.get(i));
@@ -101,8 +99,7 @@ public class Main {
                                         optionsLine.append("  ");
                                     }
                                 }
-                                System.out.println(optionsLine.toString());
-                                System.out.print("$ " + buffer.toString());
+                                System.out.print(optionsLine.toString() + "\r\n$ " + buffer.toString());
                                 consecutiveTabs = 0;
                             }
                         } else {
@@ -118,14 +115,13 @@ public class Main {
                 consecutiveTabs = 0;
                 String input = buffer.toString().trim();
                 buffer.setLength(0);
-                System.out.flush();
 
                 if (!input.isEmpty()) {
                     executeCommand(input);
+                } else {
+                    System.out.print("\r\n$ ");
+                    System.out.flush();
                 }
-
-                System.out.print("$ ");
-                System.out.flush();
 
             } else if (ch == 127 || ch == '\b') {
                 consecutiveTabs = 0;
@@ -149,32 +145,37 @@ public class Main {
         if (command.equals("exit")) {
             System.exit(0);
         } else if (command.equals("echo")) {
-            if (argsList.length > 1) {
-                System.out.println(String.join(" ", Arrays.copyOfRange(argsList, 1, argsList.length)));
-            } else {
-                System.out.println();
-            }
+            String output = argsList.length > 1
+                ? String.join(" ", Arrays.copyOfRange(argsList, 1, argsList.length))
+                : "";
+            System.out.print("\r\n" + output + "\r\n$ ");
+            System.out.flush();
         } else if (command.equals("pwd")) {
-            System.out.println(System.getProperty("user.dir"));
+            System.out.print("\r\n" + System.getProperty("user.dir") + "\r\n$ ");
+            System.out.flush();
         } else if (command.equals("type")) {
+            String result = "";
             if (argsList.length > 1) {
                 String targetCommand = argsList[1];
                 if (targetCommand.equals("jobs") || targetCommand.equals("exit") ||
-                        targetCommand.equals("type") || targetCommand.equals("echo") ||
-                        targetCommand.equals("pwd")) {
-                    System.out.println(targetCommand + " is a shell builtin");
+                    targetCommand.equals("type") || targetCommand.equals("echo") ||
+                    targetCommand.equals("pwd")) {
+                    result = targetCommand + " is a shell builtin";
                 } else {
-                    System.out.println(targetCommand + ": not found");
+                    result = targetCommand + ": not found";
                 }
             }
+            System.out.print("\r\n" + result + "\r\n$ ");
+            System.out.flush();
         } else {
-            System.out.println(command + ": command not found");
+            System.out.print("\r\n" + command + ": command not found\r\n$ ");
+            System.out.flush();
         }
     }
 
     private static List<String> findCommandMatches(String prefix) {
         List<String> matches = new ArrayList<>();
-        String[] builtins = { "exit", "jobs", "type", "echo", "pwd" };
+        String[] builtins = {"exit", "jobs", "type", "echo", "pwd"};
         for (String b : builtins) {
             if (b.startsWith(prefix) && !matches.contains(b)) {
                 matches.add(b);
@@ -205,14 +206,12 @@ public class Main {
     }
 
     private static String findLongestCommonPrefix(List<String> strs) {
-        if (strs == null || strs.isEmpty())
-            return "";
+        if (strs == null || strs.isEmpty()) return "";
         String prefix = strs.get(0);
         for (int i = 1; i < strs.size(); i++) {
             while (strs.get(i).indexOf(prefix) != 0) {
                 prefix = prefix.substring(0, prefix.length() - 1);
-                if (prefix.isEmpty())
-                    return "";
+                if (prefix.isEmpty()) return "";
             }
         }
         return prefix;
