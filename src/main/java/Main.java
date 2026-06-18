@@ -169,14 +169,21 @@ public class Main {
 
         for (int i = 0; i < tokens.length; i++) {
             String t = tokens[i];
-            if (t.equals("2>>") || t.equals(">>") || t.equals("2>") || t.equals(">")) {
+            if (t.equals("2>>") || t.equals("1>>") || t.equals(">>")
+                    || t.equals("2>") || t.equals("1>") || t.equals(">")) {
                 if (i + 1 < tokens.length) {
-                    redirects.add(new Redirect(t, tokens[++i]));
+                    // normalise 1>> -> >>  and  1> -> >
+                    String type = t.replace("1>>", ">>").replace("1>", ">");
+                    redirects.add(new Redirect(type, tokens[++i]));
                 }
             } else if (t.startsWith("2>>")) {
                 redirects.add(new Redirect("2>>", t.substring(3)));
             } else if (t.startsWith("2>")) {
                 redirects.add(new Redirect("2>", t.substring(2)));
+            } else if (t.startsWith("1>>")) {
+                redirects.add(new Redirect(">>", t.substring(3)));
+            } else if (t.startsWith("1>")) {
+                redirects.add(new Redirect(">", t.substring(2)));
             } else if (t.startsWith(">>")) {
                 redirects.add(new Redirect(">>", t.substring(2)));
             } else if (t.startsWith(">")) {
