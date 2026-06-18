@@ -259,26 +259,25 @@ public class Main {
             if (activeArgs.length == 1) {
                 List<String> lines = new ArrayList<>();
                 for (Map.Entry<String, String> entry : completionRegistry.entrySet()) {
-                    lines.add("complete -c " + entry.getKey() + " " + entry.getValue());
+                    lines.add("complete -C '" + entry.getValue() + "' " + entry.getKey());
                 }
                 Collections.sort(lines);
                 result = String.join("\r\n", lines);
             } else if (activeArgs.length == 3 && activeArgs[1].equalsIgnoreCase("-r")) {
                 completionRegistry.remove(activeArgs[2]);
             } else if (activeArgs.length == 4 && activeArgs[1].equalsIgnoreCase("-c")) {
-                // Register script and map cleanly for both -c and -C syntax formats
                 completionRegistry.put(activeArgs[3], activeArgs[2]);
             } else if (activeArgs.length == 3 && activeArgs[1].equalsIgnoreCase("-p")) {
                 String targetCmd = activeArgs[2];
                 if (completionRegistry.containsKey(targetCmd)) {
-                    result = "complete -c " + targetCmd + " " + completionRegistry.get(targetCmd);
+                    result = "complete -C '" + completionRegistry.get(targetCmd) + "' " + targetCmd;
                 } else {
                     result = "complete: " + targetCmd + ": no completion specification";
                 }
             } else if (activeArgs.length == 2) {
                 String targetCmd = activeArgs[1];
                 if (completionRegistry.containsKey(targetCmd)) {
-                    result = "complete -c " + targetCmd + " " + completionRegistry.get(targetCmd);
+                    result = "complete -C '" + completionRegistry.get(targetCmd) + "' " + targetCmd;
                 } else {
                     result = "complete: " + targetCmd + ": no completion specification";
                 }
