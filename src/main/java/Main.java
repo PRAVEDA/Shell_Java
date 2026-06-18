@@ -349,9 +349,23 @@ public class Main {
             System.out.flush();
 
         } else if (command.equals("cd")) {
-            String target = args.size() > 1 ? args.get(1) : System.getenv("HOME");
-            if (target == null) target = System.getProperty("user.home");
-            if (target.equals("~")) target = System.getProperty("user.home");
+           String home = System.getenv("HOME");
+          if (home == null) {
+        home = System.getProperty("user.home");
+    }
+
+    String target;
+
+    if (args.size() <= 1) {
+        target = home;
+    } else {
+        target = args.get(1);
+
+        if (target.equals("~")) {
+            target = home;
+        }
+    }
+
             File dir = new File(target).isAbsolute()
                 ? new File(target)
                 : new File(System.getProperty("user.dir"), target);
