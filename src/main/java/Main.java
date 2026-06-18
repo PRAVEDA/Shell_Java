@@ -1,25 +1,16 @@
-import java.io.File;
-import java.io.FileDescriptor;
-import java.io.FileInputStream;
-import java.io.InputStream;
-import java.lang.reflect.Method;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
+import java.io.*;
+import java.util.*;
+import java.nio.file.*;
 
 public class Main {
 
-    // Disable terminal echo + canonical mode via stty called as a subprocess
     private static void setRawMode() {
         try {
             new ProcessBuilder("stty", "-icanon", "-echo", "min", "1", "time", "0")
                 .inheritIO()
                 .start()
                 .waitFor();
-        } catch (Exception e) {
-            // ignore
-        }
+        } catch (Exception e) { }
     }
 
     private static void restoreMode() {
@@ -28,9 +19,7 @@ public class Main {
                 .inheritIO()
                 .start()
                 .waitFor();
-        } catch (Exception e) {
-            // ignore
-        }
+        } catch (Exception e) { }
     }
 
     public static void main(String[] args) throws Exception {
@@ -56,20 +45,15 @@ public class Main {
                 int lastSpaceIdx = currentStr.lastIndexOf(' ');
 
                 if (lastSpaceIdx == -1) {
-                    // COMMAND COMPLETION
                     String prefix = currentStr;
                     if (!prefix.isEmpty()) {
                         List<String> commandMatches = findCommandMatches(prefix);
-
                         if (!commandMatches.isEmpty()) {
                             String commonPrefix = findLongestCommonPrefix(commandMatches);
-
                             if (commonPrefix.length() > prefix.length()) {
                                 buffer.setLength(0);
                                 buffer.append(commonPrefix);
-                                if (commandMatches.size() == 1) {
-                                    buffer.append(" ");
-                                }
+                                if (commandMatches.size() == 1) buffer.append(" ");
                                 consecutiveTabs = 0;
                                 System.out.print("\r\33[K$ " + buffer.toString());
                             } else {
@@ -80,9 +64,7 @@ public class Main {
                                     StringBuilder optionsLine = new StringBuilder();
                                     for (int i = 0; i < commandMatches.size(); i++) {
                                         optionsLine.append(commandMatches.get(i));
-                                        if (i < commandMatches.size() - 1) {
-                                            optionsLine.append("  ");
-                                        }
+                                        if (i < commandMatches.size() - 1) optionsLine.append("  ");
                                     }
                                     System.out.print(optionsLine.toString() + "\r\n$ " + buffer.toString());
                                     consecutiveTabs = 0;
@@ -95,24 +77,18 @@ public class Main {
                         System.out.print("\007");
                     }
                 } else {
-                    // FILENAME COMPLETION
                     String prefix = currentStr.substring(lastSpaceIdx + 1);
                     if (!prefix.isEmpty()) {
                         File currentDir = new File(System.getProperty("user.dir"));
                         File[] files = currentDir.listFiles();
                         List<String> matches = new ArrayList<>();
-
                         if (files != null) {
                             for (File file : files) {
-                                if (file.getName().startsWith(prefix)) {
-                                    matches.add(file.getName());
-                                }
+                                if (file.getName().startsWith(prefix)) matches.add(file.getName());
                             }
                         }
-
                         if (matches.size() == 1) {
-                            String matchedFilename = matches.get(0);
-                            String remainder = matchedFilename.substring(prefix.length()) + " ";
+                            String remainder = matches.get(0).substring(prefix.length()) + " ";
                             buffer.append(remainder);
                             consecutiveTabs = 0;
                             System.out.print("\r\33[K$ " + buffer.toString());
@@ -125,9 +101,7 @@ public class Main {
                                 StringBuilder optionsLine = new StringBuilder();
                                 for (int i = 0; i < matches.size(); i++) {
                                     optionsLine.append(matches.get(i));
-                                    if (i < matches.size() - 1) {
-                                        optionsLine.append("  ");
-                                    }
+                                    if (i < matches.size() - 1) optionsLine.append("  ");
                                 }
                                 System.out.print(optionsLine.toString() + "\r\n$ " + buffer.toString());
                                 consecutiveTabs = 0;
@@ -145,11 +119,8 @@ public class Main {
                 consecutiveTabs = 0;
                 String input = buffer.toString().trim();
                 buffer.setLength(0);
-
-                // We control the newline - do NOT let the terminal echo it
                 System.out.print("\r\n");
                 System.out.flush();
-
                 if (!input.isEmpty()) {
                     executeCommand(input);
                 } else {
@@ -166,7 +137,6 @@ public class Main {
                 }
 
             } else {
-                // Echo is OFF - we must echo every printable character ourselves
                 consecutiveTabs = 0;
                 buffer.append(ch);
                 System.out.print(ch);
@@ -175,64 +145,226 @@ public class Main {
         }
     }
 
-    private static void executeCommand(String input) {
-        String[] argsList = input.split("\\s+");
-        String command = argsList[0];
+    // ── Redirection descriptor ──────────────────────────────────────────────
+    static class Redirect {
+        String type; // ">", ">>", "2>", "2>>"
+        String file;
+        Redirect(String type, String file) { this.type = type; this.file = file; }
+    }
 
+    // ── Parse tokens, extracting redirections ───────────────────────────────
+    static class ParsedCommand {
+        List<String> args;
+        List<Redirect> redirects;
+        ParsedCommand(List<String> args, List<Redirect> redirects) {
+            this.args = args; this.redirects = redirects;
+        }
+    }
+
+    private static ParsedCommand parseCommand(String input) {
+        // Simple tokeniser (handles 2>>, 2>, >>, >)
+        String[] tokens = input.split("\\s+");
+        List<String> args = new ArrayList<>();
+        List<Redirect> redirects = new ArrayList<>();
+
+        for (int i = 0; i < tokens.length; i++) {
+            String t = tokens[i];
+            if (t.equals("2>>") || t.equals(">>") || t.equals("2>") || t.equals(">")) {
+                if (i + 1 < tokens.length) {
+                    redirects.add(new Redirect(t, tokens[++i]));
+                }
+            } else if (t.startsWith("2>>")) {
+                redirects.add(new Redirect("2>>", t.substring(3)));
+            } else if (t.startsWith("2>")) {
+                redirects.add(new Redirect("2>", t.substring(2)));
+            } else if (t.startsWith(">>")) {
+                redirects.add(new Redirect(">>", t.substring(2)));
+            } else if (t.startsWith(">")) {
+                redirects.add(new Redirect(">", t.substring(1)));
+            } else {
+                args.add(t);
+            }
+        }
+        return new ParsedCommand(args, redirects);
+    }
+
+    private static void ensureParentDirs(String filePath) {
+        File f = new File(filePath);
+        if (f.getParentFile() != null) f.getParentFile().mkdirs();
+    }
+
+    private static void executeCommand(String input) throws Exception {
+        ParsedCommand parsed = parseCommand(input);
+        List<String> args = parsed.args;
+        List<Redirect> redirects = parsed.redirects;
+
+        if (args.isEmpty()) {
+            System.out.print("$ ");
+            System.out.flush();
+            return;
+        }
+
+        String command = args.get(0);
+
+        // Resolve stdout/stderr targets from redirects
+        String stdoutFile = null;
+        boolean stdoutAppend = false;
+        String stderrFile = null;
+        boolean stderrAppend = false;
+
+        for (Redirect r : redirects) {
+            if (r.type.equals(">"))   { stdoutFile = r.file; stdoutAppend = false; }
+            if (r.type.equals(">>"))  { stdoutFile = r.file; stdoutAppend = true;  }
+            if (r.type.equals("2>"))  { stderrFile = r.file; stderrAppend = false; }
+            if (r.type.equals("2>>")) { stderrFile = r.file; stderrAppend = true;  }
+        }
+
+        // ── BUILTINS ────────────────────────────────────────────────────────
         if (command.equals("exit")) {
             restoreMode();
             System.exit(0);
+
         } else if (command.equals("echo")) {
-            String output = argsList.length > 1
-                ? String.join(" ", Arrays.copyOfRange(argsList, 1, argsList.length))
+            String output = args.size() > 1
+                ? String.join(" ", args.subList(1, args.size()))
                 : "";
-            System.out.print(output + "\r\n$ ");
+            if (stdoutFile != null) {
+                ensureParentDirs(stdoutFile);
+                try (PrintWriter pw = new PrintWriter(new FileWriter(stdoutFile, stdoutAppend))) {
+                    pw.println(output);
+                }
+            } else {
+                System.out.print(output + "\r\n");
+            }
+            System.out.print("$ ");
             System.out.flush();
+
         } else if (command.equals("pwd")) {
-            System.out.print(System.getProperty("user.dir") + "\r\n$ ");
+            String output = System.getProperty("user.dir");
+            if (stdoutFile != null) {
+                ensureParentDirs(stdoutFile);
+                try (PrintWriter pw = new PrintWriter(new FileWriter(stdoutFile, stdoutAppend))) {
+                    pw.println(output);
+                }
+            } else {
+                System.out.print(output + "\r\n");
+            }
+            System.out.print("$ ");
             System.out.flush();
+
         } else if (command.equals("type")) {
             String result = "";
-            if (argsList.length > 1) {
-                String targetCommand = argsList[1];
-                if (targetCommand.equals("jobs") || targetCommand.equals("exit") ||
-                    targetCommand.equals("type") || targetCommand.equals("echo") ||
-                    targetCommand.equals("pwd")) {
+            if (args.size() > 1) {
+                String targetCommand = args.get(1);
+                Set<String> builtinSet = new HashSet<>(Arrays.asList("jobs","exit","type","echo","pwd"));
+                if (builtinSet.contains(targetCommand)) {
                     result = targetCommand + " is a shell builtin";
                 } else {
-                    result = targetCommand + ": not found";
+                    String found = findInPath(targetCommand);
+                    result = found != null ? targetCommand + " is " + found : targetCommand + ": not found";
                 }
             }
-            System.out.print(result + "\r\n$ ");
+            if (stdoutFile != null) {
+                ensureParentDirs(stdoutFile);
+                try (PrintWriter pw = new PrintWriter(new FileWriter(stdoutFile, stdoutAppend))) {
+                    pw.println(result);
+                }
+            } else {
+                System.out.print(result + "\r\n");
+            }
+            System.out.print("$ ");
             System.out.flush();
+
+        } else if (command.equals("cd")) {
+            String target = args.size() > 1 ? args.get(1) : System.getenv("HOME");
+            if (target == null) target = System.getProperty("user.home");
+            if (target.equals("~")) target = System.getProperty("user.home");
+            File dir = new File(target).isAbsolute()
+                ? new File(target)
+                : new File(System.getProperty("user.dir"), target);
+            if (dir.exists() && dir.isDirectory()) {
+                System.setProperty("user.dir", dir.getCanonicalPath());
+            } else {
+                System.out.print("cd: " + target + ": No such file or directory\r\n");
+            }
+            System.out.print("$ ");
+            System.out.flush();
+
         } else {
-            System.out.print(command + ": command not found\r\n$ ");
+            // ── EXTERNAL COMMAND ────────────────────────────────────────────
+            String execPath = findInPath(command);
+            if (execPath == null) {
+                String errMsg = command + ": command not found";
+                if (stderrFile != null) {
+                    ensureParentDirs(stderrFile);
+                    try (PrintWriter pw = new PrintWriter(new FileWriter(stderrFile, stderrAppend))) {
+                        pw.println(errMsg);
+                    }
+                } else {
+                    System.out.print(errMsg + "\r\n");
+                }
+                System.out.print("$ ");
+                System.out.flush();
+                return;
+            }
+
+            ProcessBuilder pb = new ProcessBuilder(args);
+            pb.directory(new File(System.getProperty("user.dir")));
+
+            // stdout
+            if (stdoutFile != null) {
+                ensureParentDirs(stdoutFile);
+                pb.redirectOutput(stdoutAppend
+                    ? ProcessBuilder.Redirect.appendTo(new File(stdoutFile))
+                    : ProcessBuilder.Redirect.to(new File(stdoutFile)));
+            } else {
+                pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+            }
+
+            // stderr
+            if (stderrFile != null) {
+                ensureParentDirs(stderrFile);
+                pb.redirectError(stderrAppend
+                    ? ProcessBuilder.Redirect.appendTo(new File(stderrFile))
+                    : ProcessBuilder.Redirect.to(new File(stderrFile)));
+            } else {
+                pb.redirectError(ProcessBuilder.Redirect.INHERIT);
+            }
+
+            Process p = pb.start();
+            p.waitFor();
+            System.out.print("$ ");
             System.out.flush();
         }
+    }
+
+    private static String findInPath(String command) {
+        String pathEnv = System.getenv("PATH");
+        if (pathEnv == null) return null;
+        for (String dir : pathEnv.split(File.pathSeparator)) {
+            File f = new File(dir, command);
+            if (f.isFile() && f.canExecute()) return f.getAbsolutePath();
+        }
+        return null;
     }
 
     private static List<String> findCommandMatches(String prefix) {
         List<String> matches = new ArrayList<>();
         String[] builtins = {"exit", "jobs", "type", "echo", "pwd"};
         for (String b : builtins) {
-            if (b.startsWith(prefix) && !matches.contains(b)) {
-                matches.add(b);
-            }
+            if (b.startsWith(prefix) && !matches.contains(b)) matches.add(b);
         }
-
         String pathEnv = System.getenv("PATH");
         if (pathEnv != null) {
-            String[] paths = pathEnv.split(File.pathSeparator);
-            for (String path : paths) {
+            for (String path : pathEnv.split(File.pathSeparator)) {
                 File dir = new File(path);
                 if (dir.exists() && dir.isDirectory()) {
                     File[] files = dir.listFiles();
                     if (files != null) {
                         for (File f : files) {
-                            if (f.isFile() && f.canExecute() && f.getName().startsWith(prefix)) {
-                                if (!matches.contains(f.getName())) {
-                                    matches.add(f.getName());
-                                }
+                            if (f.isFile() && f.canExecute() && f.getName().startsWith(prefix)
+                                && !matches.contains(f.getName())) {
+                                matches.add(f.getName());
                             }
                         }
                     }
