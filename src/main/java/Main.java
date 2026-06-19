@@ -138,6 +138,8 @@ public class Main {
                 if (!input.isEmpty()) {
                     executeCommand(input);
                 } else {
+                    // Check for background statuses even on blank line Enter key presses
+                    checkAndReportBackgroundJobs(false);
                     System.out.print("$ ");
                     System.out.flush();
                 }
@@ -245,6 +247,42 @@ public class Main {
         new FileWriter(filePath, append).close();
     }
 
+    /**
+     * Updates states and prints out status reports.
+     * @param forcePrintAll If true (explicit `jobs` call), prints both Running and Done jobs. 
+     * If false (passive prompt check), only prints newly transitioning "Done" jobs.
+     */
+    private static void checkAndReportBackgroundJobs(boolean forcePrintAll) {
+        List<BackgroundJob> toPrint = new ArrayList<>();
+        
+        for (BackgroundJob job : activeJobs) {
+            if (job.status.equals("Running") && !job.process.isAlive()) {
+                job.status = "Done";
+                toPrint.add(job);
+            } else if (forcePrintAll) {
+                toPrint.add(job);
+            }
+        }
+
+        // Output lines according to strict structure layout
+        for (BackgroundJob job : toPrint) {
+            int idx = activeJobs.indexOf(job);
+            char statusChar = ' ';
+            if (idx == activeJobs.size() - 1) {
+                statusChar = '+';
+            } else if (idx == activeJobs.size() - 2) {
+                statusChar = '-';
+            }
+            
+            String formattedStatus = String.format("%-24s", job.status);
+            String suffix = job.status.equals("Running") ? " &" : "";
+            System.out.print("[" + job.id + "]" + statusChar + "  " + formattedStatus + job.commandStr + suffix + "\r\n");
+        }
+
+        // Clean up completed entries from active memory tracking
+        activeJobs.removeIf(job -> job.status.equals("Done"));
+    }
+
     private static void executeCommand(String input) throws Exception {
         String[] rawParts = input.trim().split("\\s+");
         
@@ -253,6 +291,7 @@ public class Main {
         List<Redirect> redirects = parsed.redirects;
 
         if (args.isEmpty()) {
+            checkAndReportBackgroundJobs(false);
             System.out.print("$ ");
             System.out.flush();
             return;
@@ -266,6 +305,7 @@ public class Main {
         }
 
         if (args.isEmpty()) {
+            checkAndReportBackgroundJobs(false);
             System.out.print("$ ");
             System.out.flush();
             return;
@@ -328,6 +368,7 @@ public class Main {
             } else {
                 if (!result.isEmpty()) System.out.print(result + "\r\n");
             }
+            checkAndReportBackgroundJobs(false);
             System.out.print("$ ");
             System.out.flush();
             return;
@@ -346,6 +387,7 @@ public class Main {
             } else {
                 System.out.print(output + "\r\n");
             }
+            checkAndReportBackgroundJobs(false);
             System.out.print("$ ");
             System.out.flush();
 
@@ -358,6 +400,7 @@ public class Main {
             } else {
                 System.out.print(output + "\r\n");
             }
+            checkAndReportBackgroundJobs(false);
             System.out.print("$ ");
             System.out.flush();
 
@@ -380,6 +423,7 @@ public class Main {
             } else {
                 System.out.print(result + "\r\n");
             }
+            checkAndReportBackgroundJobs(false);
             System.out.print("$ ");
             System.out.flush();
 
@@ -395,36 +439,12 @@ public class Main {
             } else {
                 System.out.print("cd: " + target + ": No such file or directory\r\n");
             }
+            checkAndReportBackgroundJobs(false);
             System.out.print("$ ");
             System.out.flush();
 
         } else if (command.equals("jobs")) {
-            // Update transitions from "Running" -> "Done"
-            for (BackgroundJob job : activeJobs) {
-                if (job.status.equals("Running") && !job.process.isAlive()) {
-                    job.status = "Done";
-                }
-            }
-
-            // Print existing tracking records
-            for (int i = 0; i < activeJobs.size(); i++) {
-                BackgroundJob job = activeJobs.get(i);
-                char statusChar = ' ';
-                if (i == activeJobs.size() - 1) {
-                    statusChar = '+';
-                } else if (i == activeJobs.size() - 2) {
-                    statusChar = '-';
-                }
-                
-                // Keep field width matching dynamically depending on status layout lengths
-                String formattedStatus = String.format("%-24s", job.status);
-                String suffix = job.status.equals("Running") ? " &" : "";
-                System.out.print("[" + job.id + "]" + statusChar + "  " + formattedStatus + job.commandStr + suffix + "\r\n");
-            }
-
-            // Evict printed "Done" items from the tracker queue
-            activeJobs.removeIf(job -> job.status.equals("Done"));
-
+            checkAndReportBackgroundJobs(true);
             System.out.print("$ ");
             System.out.flush();
             return;
@@ -438,6 +458,7 @@ public class Main {
                 } else {
                     System.out.print(errMsg + "\r\n");
                 }
+                checkAndReportBackgroundJobs(false);
                 System.out.print("$ ");
                 System.out.flush();
                 return;
@@ -473,6 +494,7 @@ public class Main {
                 p.waitFor();
             }
             
+            checkAndReportBackgroundJobs(false);
             System.out.print("$ ");
             System.out.flush();
         }
