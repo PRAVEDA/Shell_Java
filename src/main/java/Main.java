@@ -133,7 +133,7 @@ public class Main {
                 System.out.print("\r\n");
                 System.out.flush();
                 if (!input.isEmpty()) {
-                    executeCommand(input);
+                    executeCommandLine(input);
                 } else {
                     checkAndReportBackgroundJobs(false);
                     System.out.print("$ ");
@@ -272,25 +272,178 @@ public class Main {
         activeJobs.removeIf(job -> job.status.equals("Done"));
     }
 
-    private static void executeCommand(String input) throws Exception {
-        String[] rawParts = input.trim().split("\\s+");
+    // Splits a command line safely by unquoted/unescaped pipe characters
+    private static List<String> splitByPipes(String input) {
+        List<String> stages = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        boolean inSingle = false;
+        boolean inDouble = false;
+
+        for (int i = 0; i < input.length(); i++) {
+            char c = input.charAt(i);
+            if (c == '\\' && !inSingle) {
+                current.append(c);
+                if (i + 1 < input.length()) {
+                    current.append(input.charAt(i + 1));
+                    i++;
+                }
+                continue;
+            }
+            if (c == '\'' && !inDouble) {
+                inSingle = !inSingle;
+                current.append(c);
+                continue;
+            }
+            if (c == '"' && !inSingle) {
+                inDouble = !inDouble;
+                current.append(c);
+                continue;
+            }
+            if (c == '|' && !inSingle && !inDouble) {
+                stages.add(current.toString().trim());
+                current.setLength(0);
+            } else {
+                current.append(c);
+            }
+        }
+        stages.add(current.toString().trim());
+        return stages;
+    }
+
+    private static void executeCommandLine(String input) throws Exception {
+        boolean isBackgroundJob = false;
+        String workingInput = input.trim();
+        if (workingInput.endsWith("&")) {
+            isBackgroundJob = true;
+            workingInput = workingInput.substring(0, workingInput.length() - 1).trim();
+        }
+
+        List<String> pipeStages = splitByPipes(workingInput);
+
+        if (pipeStages.size() == 1) {
+            // Single stage, maintain backwards compatibility completely
+            executeSingleCommand(pipeStages.get(0), isBackgroundJob, input);
+        } else {
+            // Multi-stage pipeline execution
+            executePipeline(pipeStages, isBackgroundJob, input);
+        }
+    }
+
+    private static void executePipeline(List<String> stages, boolean isBackgroundJob, String originalInput) throws Exception {
+        List<Process> processes = new ArrayList<>();
         
-        ParsedCommand parsed = parseCommand(input);
+        for (int i = 0; i < stages.size(); i++) {
+            ParsedCommand parsed = parseCommand(stages.get(i));
+            List<String> args = parsed.args;
+            List<Redirect> redirects = parsed.redirects;
+
+            if (args.isEmpty()) continue;
+
+            String command = args.get(0);
+            String execPath = findInPath(command);
+            if (execPath == null) {
+                System.err.println(command + ": command not found");
+                checkAndReportBackgroundJobs(false);
+                System.out.print("$ ");
+                System.out.flush();
+                return;
+            }
+
+            ProcessBuilder pb = new ProcessBuilder(args);
+            pb.directory(new File(System.getProperty("user.dir")));
+
+            String stdoutFile = null;
+            boolean stdoutAppend = false;
+            String stderrFile = null;
+            boolean stderrAppend = false;
+
+            for (Redirect r : redirects) {
+                if (r.type.equals(">"))   { stdoutFile = r.file; stdoutAppend = false; }
+                if (r.type.equals(">>"))  { stdoutFile = r.file; stdoutAppend = true;  }
+                if (r.type.equals("2>"))  { stderrFile = r.file; stderrAppend = false; }
+                if (r.type.equals("2>>")) { stderrFile = r.file; stderrAppend = true;  }
+            }
+
+            // Route standard input/outputs across the lifecycle
+            if (i == 0) {
+                pb.redirectInput(ProcessBuilder.Redirect.INHERIT);
+            } else {
+                pb.redirectInput(ProcessBuilder.Redirect.PIPE);
+            }
+
+            if (i == stages.size() - 1) {
+                if (stdoutFile != null) {
+                    ensureParentDirs(stdoutFile);
+                    pb.redirectOutput(stdoutAppend ? ProcessBuilder.Redirect.appendTo(new File(stdoutFile)) : ProcessBuilder.Redirect.to(new File(stdoutFile)));
+                } else {
+                    pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+                }
+            } else {
+                pb.redirectOutput(ProcessBuilder.Redirect.PIPE);
+            }
+
+            if (stderrFile != null) {
+                ensureParentDirs(stderrFile);
+                pb.redirectError(stderrAppend ? ProcessBuilder.Redirect.appendTo(new File(stderrFile)) : ProcessBuilder.Redirect.to(new File(stderrFile)));
+            } else {
+                pb.redirectError(ProcessBuilder.Redirect.INHERIT);
+            }
+
+            Process p = pb.start();
+            processes.add(p);
+        }
+
+        // Bridge streams between connected pipeline stages using background threads
+        for (int i = 0; i < processes.size() - 1; i++) {
+            final InputStream src = processes.get(i).getInputStream();
+            final OutputStream dest = processes.get(i + 1).getOutputStream();
+            Thread t = new Thread(() -> {
+                try (src; dest) {
+                    byte[] buffer = new byte[4096];
+                    int read;
+                    while ((read = src.read(buffer)) != -1) {
+                        dest.write(buffer, 0, read);
+                        dest.flush();
+                    }
+                } catch (IOException e) { }
+            });
+            t.setDaemon(true);
+            t.start();
+        }
+
+        if (isBackgroundJob) {
+            int currentJobNumber = 1;
+            while (true) {
+                boolean idTaken = false;
+                for (BackgroundJob job : activeJobs) {
+                    if (job.id == currentJobNumber) {
+                        idTaken = true;
+                        break;
+                    }
+                }
+                if (!idTaken) break;
+                currentJobNumber++;
+            }
+            // Track the last process in the pipe sequence as the master sentinel job
+            Process monitoringProcess = processes.get(processes.size() - 1);
+            System.out.print("[" + currentJobNumber + "] " + monitoringProcess.pid() + "\r\n");
+            activeJobs.add(new BackgroundJob(currentJobNumber, monitoringProcess, originalInput.replace("&", "").trim()));
+        } else {
+            for (Process p : processes) {
+                p.waitFor();
+            }
+        }
+
+        checkAndReportBackgroundJobs(false);
+        System.out.print("$ ");
+        System.out.flush();
+    }
+
+    private static void executeSingleCommand(String stageInput, boolean isBackgroundJob, String originalInput) throws Exception {
+        String[] rawParts = stageInput.trim().split("\\s+");
+        ParsedCommand parsed = parseCommand(stageInput);
         List<String> args = parsed.args;
         List<Redirect> redirects = parsed.redirects;
-
-        if (args.isEmpty()) {
-            checkAndReportBackgroundJobs(false);
-            System.out.print("$ ");
-            System.out.flush();
-            return;
-        }
-
-        boolean isBackgroundJob = false;
-        if (!args.isEmpty() && args.get(args.size() - 1).equals("&")) {
-            isBackgroundJob = true;
-            args.remove(args.size() - 1);
-        }
 
         if (args.isEmpty()) {
             checkAndReportBackgroundJobs(false);
@@ -486,9 +639,7 @@ public class Main {
 
                 long pid = p.pid();
                 System.out.print("[" + currentJobNumber + "] " + pid + "\r\n");
-                
-                String commandStr = String.join(" ", args);
-                activeJobs.add(new BackgroundJob(currentJobNumber, p, commandStr));
+                activeJobs.add(new BackgroundJob(currentJobNumber, p, originalInput.replace("&", "").trim()));
             } else {
                 p.waitFor();
             }
