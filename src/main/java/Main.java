@@ -272,7 +272,6 @@ public class Main {
         activeJobs.removeIf(job -> job.status.equals("Done"));
     }
 
-    // Splits a command line safely by unquoted/unescaped pipe characters
     private static List<String> splitByPipes(String input) {
         List<String> stages = new ArrayList<>();
         StringBuilder current = new StringBuilder();
@@ -321,36 +320,50 @@ public class Main {
         List<String> pipeStages = splitByPipes(workingInput);
 
         if (pipeStages.size() == 1) {
-            // Single stage, maintain backwards compatibility completely
             executeSingleCommand(pipeStages.get(0), isBackgroundJob, input);
         } else {
-            // Multi-stage pipeline execution
             executePipeline(pipeStages, isBackgroundJob, input);
         }
     }
 
+    // Helper to evaluate shell builtins and collect their output as a String
+    private static String evaluateBuiltin(String command, List<String> args) throws Exception {
+        if (command.equals("echo")) {
+            return args.size() > 1 ? String.join(" ", args.subList(1, args.size())) : "";
+        } else if (command.equals("pwd")) {
+            return System.getProperty("user.dir");
+        } else if (command.equals("type")) {
+            if (args.size() > 1) {
+                String targetCommand = args.get(1);
+                Set<String> builtinSet = new HashSet<>(Arrays.asList("complete","jobs","exit","type","echo","pwd","cd"));
+                if (builtinSet.contains(targetCommand)) {
+                    return targetCommand + " is a shell builtin";
+                } else {
+                    String found = findInPath(targetCommand);
+                    return found != null ? targetCommand + " is " + found : targetCommand + ": not found";
+                }
+            }
+            return "";
+        }
+        return null;
+    }
+
     private static void executePipeline(List<String> stages, boolean isBackgroundJob, String originalInput) throws Exception {
-        List<Process> processes = new ArrayList<>();
+        // We will bridge input/output streams between successive stages.
+        // For stages that are external commands, we spawn a Process.
+        // For stages that are builtins, we mimic a process interface using dynamic threads or direct stream feeding.
         
+        InputStream currentIn = System.in;
+        Set<String> builtins = new HashSet<>(Arrays.asList("echo", "pwd", "type", "cd", "exit", "jobs"));
+
         for (int i = 0; i < stages.size(); i++) {
             ParsedCommand parsed = parseCommand(stages.get(i));
             List<String> args = parsed.args;
             List<Redirect> redirects = parsed.redirects;
 
             if (args.isEmpty()) continue;
-
             String command = args.get(0);
-            String execPath = findInPath(command);
-            if (execPath == null) {
-                System.err.println(command + ": command not found");
-                checkAndReportBackgroundJobs(false);
-                System.out.print("$ ");
-                System.out.flush();
-                return;
-            }
-
-            ProcessBuilder pb = new ProcessBuilder(args);
-            pb.directory(new File(System.getProperty("user.dir")));
+            boolean isLast = (i == stages.size() - 1);
 
             String stdoutFile = null;
             boolean stdoutAppend = false;
@@ -364,74 +377,108 @@ public class Main {
                 if (r.type.equals("2>>")) { stderrFile = r.file; stderrAppend = true;  }
             }
 
-            // Route standard input/outputs across the lifecycle
-            if (i == 0) {
-                pb.redirectInput(ProcessBuilder.Redirect.INHERIT);
-            } else {
-                pb.redirectInput(ProcessBuilder.Redirect.PIPE);
+            // Determine target output stream for this stage
+            OutputStream stageOut = System.out;
+            PipedInputStream nextIn = null;
+            if (!isLast) {
+                nextIn = new PipedInputStream();
+                stageOut = new PipedOutputStream(nextIn);
+            } else if (stdoutFile != null) {
+                ensureParentDirs(stdoutFile);
+                stageOut = new FileOutputStream(stdoutFile, stdoutAppend);
             }
 
-            if (i == stages.size() - 1) {
-                if (stdoutFile != null) {
-                    ensureParentDirs(stdoutFile);
-                    pb.redirectOutput(stdoutAppend ? ProcessBuilder.Redirect.appendTo(new File(stdoutFile)) : ProcessBuilder.Redirect.to(new File(stdoutFile)));
+            if (builtins.contains(command)) {
+                // Execute Builtin inside Pipeline
+                String result = evaluateBuiltin(command, args);
+                if (result == null) result = "";
+                
+                final InputStream finalIn = currentIn;
+                final OutputStream finalOut = stageOut;
+                final String finalResult = result;
+                
+                Thread builtinThread = new Thread(() -> {
+                    try {
+                        // Consume input if needed, then write output
+                        if (finalIn != System.in) {
+                            byte[] buf = new byte[4096];
+                            while (finalIn.read(buf) != -1) {} 
+                        }
+                        if (!finalResult.isEmpty()) {
+                            finalOut.write((finalResult + "\n").getBytes());
+                        }
+                        finalOut.flush();
+                        if (finalOut != System.out) finalOut.close();
+                    } catch (Exception e) {}
+                });
+                builtinThread.start();
+                if (isLast && !isBackgroundJob) {
+                    builtinThread.join();
+                }
+            } else {
+                // Execute External Command inside Pipeline
+                String execPath = findInPath(command);
+                if (execPath == null) {
+                    System.out.print(command + ": command not found\r\n");
+                    checkAndReportBackgroundJobs(false);
+                    System.out.print("$ ");
+                    System.out.flush();
+                    return;
+                }
+
+                ProcessBuilder pb = new ProcessBuilder(args);
+                pb.directory(new File(System.getProperty("user.dir")));
+                
+                if (stderrFile != null) {
+                    ensureParentDirs(stderrFile);
+                    pb.redirectError(stderrAppend ? ProcessBuilder.Redirect.appendTo(new File(stderrFile)) : ProcessBuilder.Redirect.to(new File(stderrFile)));
                 } else {
-                    pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+                    pb.redirectError(ProcessBuilder.Redirect.INHERIT);
                 }
-            } else {
+
+                pb.redirectInput(ProcessBuilder.Redirect.PIPE);
                 pb.redirectOutput(ProcessBuilder.Redirect.PIPE);
-            }
 
-            if (stderrFile != null) {
-                ensureParentDirs(stderrFile);
-                pb.redirectError(stderrAppend ? ProcessBuilder.Redirect.appendTo(new File(stderrFile)) : ProcessBuilder.Redirect.to(new File(stderrFile)));
-            } else {
-                pb.redirectError(ProcessBuilder.Redirect.INHERIT);
-            }
+                Process p = pb.start();
 
-            Process p = pb.start();
-            processes.add(p);
-        }
+                // Pipe the input down to the process
+                final InputStream finalIn = currentIn;
+                final OutputStream procOut = p.getOutputStream();
+                Thread inputFeeder = new Thread(() -> {
+                    try (finalIn; procOut) {
+                        if (finalIn != System.in) {
+                            byte[] buffer = new byte[4096];
+                            int read;
+                            while ((read = finalIn.read(buffer)) != -1) {
+                                procOut.write(buffer, 0, read);
+                            }
+                        }
+                    } catch (IOException e) {}
+                });
+                inputFeeder.start();
 
-        // Bridge streams between connected pipeline stages using background threads
-        for (int i = 0; i < processes.size() - 1; i++) {
-            final InputStream src = processes.get(i).getInputStream();
-            final OutputStream dest = processes.get(i + 1).getOutputStream();
-            Thread t = new Thread(() -> {
-                try (src; dest) {
-                    byte[] buffer = new byte[4096];
-                    int read;
-                    while ((read = src.read(buffer)) != -1) {
-                        dest.write(buffer, 0, read);
-                        dest.flush();
-                    }
-                } catch (IOException e) { }
-            });
-            t.setDaemon(true);
-            t.start();
-        }
+                // Pipe process stdout to the next stage output destination
+                final InputStream procIn = p.getInputStream();
+                final OutputStream finalOut = stageOut;
+                Thread outputCollector = new Thread(() -> {
+                    try (procIn; finalOut) {
+                        byte[] buffer = new byte[4096];
+                        int read;
+                        while ((read = procIn.read(buffer)) != -1) {
+                            finalOut.write(buffer, 0, read);
+                        }
+                        finalOut.flush();
+                    } catch (IOException e) {}
+                });
+                outputCollector.start();
 
-        if (isBackgroundJob) {
-            int currentJobNumber = 1;
-            while (true) {
-                boolean idTaken = false;
-                for (BackgroundJob job : activeJobs) {
-                    if (job.id == currentJobNumber) {
-                        idTaken = true;
-                        break;
-                    }
+                if (isLast && !isBackgroundJob) {
+                    p.waitFor();
+                    outputCollector.join();
                 }
-                if (!idTaken) break;
-                currentJobNumber++;
             }
-            // Track the last process in the pipe sequence as the master sentinel job
-            Process monitoringProcess = processes.get(processes.size() - 1);
-            System.out.print("[" + currentJobNumber + "] " + monitoringProcess.pid() + "\r\n");
-            activeJobs.add(new BackgroundJob(currentJobNumber, monitoringProcess, originalInput.replace("&", "").trim()));
-        } else {
-            for (Process p : processes) {
-                p.waitFor();
-            }
+
+            currentIn = nextIn;
         }
 
         checkAndReportBackgroundJobs(false);
