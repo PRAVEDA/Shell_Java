@@ -1,14 +1,11 @@
 import java.io.*;
 import java.util.*;
 import java.nio.file.*;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class Main {
 
     // Global registry for programmable completions
     private static final Map<String, String> completionRegistry = new HashMap<>();
-    // Global counter for tracking background jobs
-    private static final AtomicInteger jobCounter = new AtomicInteger(1);
     
     // Class to track running background jobs
     static class BackgroundJob {
@@ -138,7 +135,6 @@ public class Main {
                 if (!input.isEmpty()) {
                     executeCommand(input);
                 } else {
-                    // Check for background statuses even on blank line Enter key presses
                     checkAndReportBackgroundJobs(false);
                     System.out.print("$ ");
                     System.out.flush();
@@ -247,11 +243,6 @@ public class Main {
         new FileWriter(filePath, append).close();
     }
 
-    /**
-     * Updates states and prints out status reports.
-     * @param forcePrintAll If true (explicit `jobs` call), prints both Running and Done jobs. 
-     * If false (passive prompt check), only prints newly transitioning "Done" jobs.
-     */
     private static void checkAndReportBackgroundJobs(boolean forcePrintAll) {
         List<BackgroundJob> toPrint = new ArrayList<>();
         
@@ -264,7 +255,6 @@ public class Main {
             }
         }
 
-        // Output lines according to strict structure layout
         for (BackgroundJob job : toPrint) {
             int idx = activeJobs.indexOf(job);
             char statusChar = ' ';
@@ -279,7 +269,6 @@ public class Main {
             System.out.print("[" + job.id + "]" + statusChar + "  " + formattedStatus + job.commandStr + suffix + "\r\n");
         }
 
-        // Clean up completed entries from active memory tracking
         activeJobs.removeIf(job -> job.status.equals("Done"));
     }
 
@@ -297,7 +286,6 @@ public class Main {
             return;
         }
 
-        // Check if this command should run asynchronously in the background
         boolean isBackgroundJob = false;
         if (!args.isEmpty() && args.get(args.size() - 1).equals("&")) {
             isBackgroundJob = true;
@@ -325,7 +313,6 @@ public class Main {
             if (r.type.equals("2>>")) { stderrFile = r.file; stderrAppend = true;  }
         }
 
-        // ── COMPLETE BUILTIN LOGIC ──────────────────────────────────────────
         if (command.equals("complete") || (rawParts.length > 0 && rawParts[0].equals("complete"))) {
             String result = "";
             String[] activeArgs = (rawParts.length > args.size()) ? rawParts : args.toArray(new String[0]);
@@ -484,7 +471,19 @@ public class Main {
             Process p = pb.start();
             
             if (isBackgroundJob) {
-                int currentJobNumber = jobCounter.getAndIncrement();
+                int currentJobNumber = 1;
+                while (true) {
+                    boolean idTaken = false;
+                    for (BackgroundJob job : activeJobs) {
+                        if (job.id == currentJobNumber) {
+                            idTaken = true;
+                            break;
+                        }
+                    }
+                    if (!idTaken) break;
+                    currentJobNumber++;
+                }
+
                 long pid = p.pid();
                 System.out.print("[" + currentJobNumber + "] " + pid + "\r\n");
                 
