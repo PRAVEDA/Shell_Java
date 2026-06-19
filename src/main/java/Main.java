@@ -247,10 +247,14 @@ public class Main {
         List<BackgroundJob> toPrint = new ArrayList<>();
         
         for (BackgroundJob job : activeJobs) {
-            if (job.status.equals("Running") && !job.process.isAlive()) {
+            boolean wasRunning = job.status.equals("Running");
+            // Always refresh status
+            if (wasRunning && !job.process.isAlive()) {
                 job.status = "Done";
-                toPrint.add(job);
-            } else if (forcePrintAll) {
+            }
+            // In forcePrintAll mode (jobs command): print everything with current status
+            // In normal mode: only print jobs that just became Done
+            if (forcePrintAll || (wasRunning && job.status.equals("Done"))) {
                 toPrint.add(job);
             }
         }
