@@ -348,24 +348,28 @@ public class Main {
     }
 
     private static void executePipeline(List<String> stages, boolean isBackgroundJob, String originalInput) throws Exception {
-        byte[] currentInputBytes = new byte[0];
         Set<String> builtins = new HashSet<>(Arrays.asList("echo", "pwd", "type", "cd", "exit", "jobs"));
+
+        int n = stages.size();
+        List<Process> processes = new ArrayList<>();
+
+        // builtinInput holds bytes produced by a builtin stage to feed into the next stage
+        byte[] builtinInput = new byte[0];
+        // prevProcess is the last external process started (its stdout feeds the next stage)
+        Process prevProcess = null;
         Process lastProcess = null;
 
-        for (int i = 0; i < stages.size(); i++) {
+        for (int i = 0; i < n; i++) {
             ParsedCommand parsed = parseCommand(stages.get(i));
             List<String> args = parsed.args;
             List<Redirect> redirects = parsed.redirects;
-
             if (args.isEmpty()) continue;
+
             String command = args.get(0);
-            boolean isLast = (i == stages.size() - 1);
+            boolean isLast = (i == n - 1);
 
-            String stdoutFile = null;
-            boolean stdoutAppend = false;
-            String stderrFile = null;
-            boolean stderrAppend = false;
-
+            String stdoutFile = null; boolean stdoutAppend = false;
+            String stderrFile = null; boolean stderrAppend = false;
             for (Redirect r : redirects) {
                 if (r.type.equals(">"))   { stdoutFile = r.file; stdoutAppend = false; }
                 if (r.type.equals(">>"))  { stdoutFile = r.file; stdoutAppend = true;  }
@@ -374,29 +378,31 @@ public class Main {
             }
 
             if (builtins.contains(command)) {
+                // Evaluate builtin synchronously; its output becomes input for the next stage
                 String result = evaluateBuiltin(command, args);
                 if (result == null) result = "";
-                
-                String stageOutputStr = result.isEmpty() ? "" : result + "\n";
-                
+                String out = result.isEmpty() ? "" : result + "\n";
+
                 if (isLast) {
                     if (stdoutFile != null) {
                         ensureParentDirs(stdoutFile);
                         try (FileOutputStream fos = new FileOutputStream(stdoutFile, stdoutAppend)) {
-                            fos.write(stageOutputStr.getBytes());
+                            fos.write(out.getBytes());
                         }
                     } else {
-                        System.out.print(stageOutputStr);
+                        System.out.print(out);
                         System.out.flush();
                     }
                 } else {
-                    currentInputBytes = stageOutputStr.getBytes();
+                    builtinInput = out.getBytes();
                 }
+
             } else {
                 String execPath = findInPath(command);
                 if (execPath == null) {
                     System.out.print(command + ": command not found\r\n");
                     System.out.flush();
+                    for (Process p : processes) p.destroyForcibly();
                     checkAndReportBackgroundJobs(false);
                     System.out.print("$ ");
                     System.out.flush();
@@ -405,73 +411,82 @@ public class Main {
 
                 ProcessBuilder pb = new ProcessBuilder(args);
                 pb.directory(new File(System.getProperty("user.dir")));
-                
+
+                // stderr
                 if (stderrFile != null) {
                     ensureParentDirs(stderrFile);
-                    pb.redirectError(stderrAppend ? ProcessBuilder.Redirect.appendTo(new File(stderrFile)) : ProcessBuilder.Redirect.to(new File(stderrFile)));
+                    pb.redirectError(stderrAppend
+                        ? ProcessBuilder.Redirect.appendTo(new File(stderrFile))
+                        : ProcessBuilder.Redirect.to(new File(stderrFile)));
                 } else {
                     pb.redirectError(ProcessBuilder.Redirect.INHERIT);
                 }
 
+                // stdout: last stage can redirect to file or terminal; intermediate stages pipe
+                if (isLast && stdoutFile != null) {
+                    ensureParentDirs(stdoutFile);
+                    pb.redirectOutput(stdoutAppend
+                        ? ProcessBuilder.Redirect.appendTo(new File(stdoutFile))
+                        : ProcessBuilder.Redirect.to(new File(stdoutFile)));
+                } else if (isLast) {
+                    pb.redirectOutput(ProcessBuilder.Redirect.INHERIT);
+                } else {
+                    pb.redirectOutput(ProcessBuilder.Redirect.PIPE);
+                }
+
+                // stdin always via PIPE so we can feed from prev process or builtin bytes
                 pb.redirectInput(ProcessBuilder.Redirect.PIPE);
-                pb.redirectOutput(ProcessBuilder.Redirect.PIPE);
 
                 Process p = pb.start();
-                if (isLast) {
-                    lastProcess = p;
-                }
+                processes.add(p);
+                lastProcess = p;
 
-                // Feed current input to the process synchronously
-                if (currentInputBytes.length > 0) {
-                    try (OutputStream os = p.getOutputStream()) {
-                        os.write(currentInputBytes);
-                        os.flush();
-                    }
-                } else {
-                    p.getOutputStream().close();
-                }
+                // Capture references for the feeder thread
+                final Process thisProcess = p;
+                final Process sourcePrev = prevProcess;
+                final byte[] sourceBuiltin = builtinInput;
+                builtinInput = new byte[0];
 
-                // Gather output from the process synchronously
-                ByteArrayOutputStream baos = new ByteArrayOutputStream();
-                try (InputStream is = p.getInputStream()) {
-                    byte[] buffer = new byte[4096];
-                    int read;
-                    while ((read = is.read(buffer)) != -1) {
-                        baos.write(buffer, 0, read);
-                    }
-                }
-
-                if (!isBackgroundJob) {
-                    p.waitFor();
-                }
-
-                byte[] processOutputBytes = baos.toByteArray();
-                
-                if (isLast) {
-                    if (stdoutFile != null) {
-                        ensureParentDirs(stdoutFile);
-                        try (FileOutputStream fos = new FileOutputStream(stdoutFile, stdoutAppend)) {
-                            fos.write(processOutputBytes);
+                // Feeder thread: pipes data into this process's stdin concurrently
+                Thread feeder = new Thread(() -> {
+                    try (OutputStream os = thisProcess.getOutputStream()) {
+                        if (sourcePrev != null) {
+                            // Stream from previous process's stdout
+                            try (InputStream is = sourcePrev.getInputStream()) {
+                                byte[] buf = new byte[4096];
+                                int read;
+                                while ((read = is.read(buf)) != -1) {
+                                    os.write(buf, 0, read);
+                                    os.flush();
+                                }
+                            }
+                        } else if (sourceBuiltin.length > 0) {
+                            os.write(sourceBuiltin);
+                            os.flush();
                         }
-                    } else {
-                        System.out.write(processOutputBytes);
-                        System.out.flush();
+                        // Closing os signals EOF to the process
+                    } catch (IOException e) {
+                        // Broken pipe is normal when downstream exits early (e.g. head -n 5)
                     }
-                } else {
-                    currentInputBytes = processOutputBytes;
-                }
+                });
+                feeder.setDaemon(true);
+                feeder.start();
+
+                prevProcess = p;
             }
         }
 
-        if (isBackgroundJob && lastProcess != null) {
+        // Wait for all processes to finish (unless background)
+        if (!isBackgroundJob) {
+            for (Process p : processes) {
+                p.waitFor();
+            }
+        } else if (lastProcess != null) {
             int currentJobNumber = 1;
             while (true) {
                 boolean idTaken = false;
                 for (BackgroundJob job : activeJobs) {
-                    if (job.id == currentJobNumber) {
-                        idTaken = true;
-                        break;
-                    }
+                    if (job.id == currentJobNumber) { idTaken = true; break; }
                 }
                 if (!idTaken) break;
                 currentJobNumber++;
